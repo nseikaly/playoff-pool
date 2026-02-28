@@ -166,6 +166,16 @@ const css = `
   .pbi { height:100%; background:var(--cyan); border-radius:2px; }
   .pct { font-family:'JetBrains Mono',monospace; color:var(--cyan); font-size:0.75rem; }
 
+  /* Admin gate */
+  .admin-gate { max-width:360px; margin:60px auto 0; background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:36px 28px; text-align:center; }
+  .admin-gate-icon { font-size:2.2rem; margin-bottom:14px; line-height:1; }
+  .admin-gate-title { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; letter-spacing:3px;
+    color:var(--text); margin-bottom:6px; }
+  .admin-gate-sub { font-size:0.72rem; color:var(--text3); letter-spacing:1px; margin-bottom:24px; }
+  .admin-gate-row { display:flex; gap:8px; }
+  .admin-gate-err { font-size:0.72rem; color:var(--red); margin-top:10px; letter-spacing:0.5px; min-height:18px; }
+
   /* Admin */
   .asc { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:14px 16px; margin-bottom:8px; }
   .arow { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
@@ -375,9 +385,11 @@ export default function App() {
   const [myName,    setMyName]    = useState(() => localStorage.getItem("pool_name") || "");
   const [myEmail,   setMyEmail]   = useState("");
   const [submitted, setSubmitted] = useState(() => localStorage.getItem("pool_submitted") === "1");
-  const [toast,     setToast]     = useState("");
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
+  const [toast,       setToast]       = useState("");
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminPass,   setAdminPass]   = useState("");
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -446,6 +458,17 @@ export default function App() {
       console.error(e);
     }
     setSaving(false);
+  };
+
+  // ── Admin: password gate ──
+  const handleAdminLogin = () => {
+    if (adminPass === "NBA") {
+      setAdminAuthed(true);
+      setAdminPass("");
+    } else {
+      showToast("Incorrect password");
+      setAdminPass("");
+    }
   };
 
   // ── Admin: set series result ──
@@ -687,7 +710,24 @@ export default function App() {
         )}
 
         {/* ══ ADMIN ══════════════════════════════════════════════════════════ */}
-        {tab === "admin" && (
+        {tab === "admin" && !adminAuthed && (
+          <div className="admin-gate">
+            <div className="admin-gate-icon">🔒</div>
+            <div className="admin-gate-title">Admin Access</div>
+            <div className="admin-gate-sub">Enter password to continue</div>
+            <div className="admin-gate-row">
+              <input
+                className="fi" type="password" placeholder="Password"
+                value={adminPass} onChange={e => setAdminPass(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleAdminLogin()}
+                autoFocus
+              />
+              <button className="btn btn-gold" onClick={handleAdminLogin}>Enter</button>
+            </div>
+          </div>
+        )}
+
+        {tab === "admin" && adminAuthed && (
           <div>
             <div className="alert alert-warn mb16">
               ⚠ Admin panel — enter series results here. Standings update automatically for all users.
