@@ -28,9 +28,9 @@ const css = `
   /* Tabs */
   .tabs { display:flex; border-bottom:1px solid var(--border); margin:20px 0 28px; }
   .tab { padding:13px 22px; font-size:0.75rem; letter-spacing:2px; text-transform:uppercase; font-weight:600;
-    color:var(--text3); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent;
+    color:var(--text2); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent;
     transition:all 0.2s; position:relative; top:1px; }
-  .tab:hover { color:var(--text2); }
+  .tab:hover { color:var(--text); }
   .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
 
   /* Legend */
@@ -40,7 +40,7 @@ const css = `
   .legend strong { color:var(--gold); font-family:'JetBrains Mono',monospace; }
 
   /* Section label */
-  .sec { font-family:'Bebas Neue',sans-serif; font-size:0.92rem; letter-spacing:3px; color:var(--text3);
+  .sec { font-family:'Bebas Neue',sans-serif; font-size:0.92rem; letter-spacing:3px; color:var(--text2);
     text-transform:uppercase; margin:24px 0 10px; display:flex; align-items:center; gap:10px; }
   .sec::after { content:''; flex:1; height:1px; background:var(--border); }
 
@@ -394,7 +394,7 @@ export default function App() {
           </div>
           <div className="row gap8">
             <span className="live-dot" />
-            <span className="xs muted">{Object.keys(participants).length} participants</span>
+            <span className="xs">{Object.keys(participants).length} participants</span>
           </div>
         </div>
 
@@ -433,7 +433,7 @@ export default function App() {
               const resultRound = results?.rounds?.find(r => r.id === round.id);
               return (
                 <div key={round.id}>
-                  <div className="sec">{round.name} <span className="xs mono muted">{round.winnerPoints}+{round.gamesPoints}pts</span></div>
+                  <div className="sec">{round.name} <span className="xs mono">{round.winnerPoints}+{round.gamesPoints}pts</span></div>
                   <div className="series-grid">
                     {round.series.map((series, si) => {
                       // Merge result data into series for display
