@@ -185,6 +185,60 @@ const css = `
     font-size:1.2rem; letter-spacing:3px; animation:pulse 1.5s infinite; }
 `;
 
+// ─── Bracket Resolution ───────────────────────────────────────────────────────
+// Maps each later-round series to the two earlier-round series whose winners
+// feed into its top/bottom slot. Mirrors the structure in bracketConfig.js.
+
+const FEEDS_FROM = {
+  // Conference Semifinals ← First Round winners
+  s9:  { top: "s1",  bottom: "s4"  },   // East: (1) vs (4/5)
+  s10: { top: "s2",  bottom: "s3"  },   // East: (2) vs (3/6)
+  s11: { top: "s5",  bottom: "s8"  },   // West: (1) vs (4/5)
+  s12: { top: "s6",  bottom: "s7"  },   // West: (2) vs (3/6)
+  // Conference Finals ← Semifinal winners
+  s13: { top: "s9",  bottom: "s10" },   // East Final
+  s14: { top: "s11", bottom: "s12" },   // West Final
+  // NBA Finals ← Conference Final winners
+  s15: { top: "s13", bottom: "s14" },
+};
+
+// Returns a copy of BRACKET_CONFIG.rounds with placeholder names replaced
+// by the actual team names from the participant's current picks.
+function resolveBracket(picks) {
+  return BRACKET_CONFIG.rounds.map(round => ({
+    ...round,
+    series: round.series.map(series => {
+      const feed = FEEDS_FROM[series.id];
+      if (!feed) return series;
+      return {
+        ...series,
+        top:    picks[feed.top]?.winner    || series.top,
+        bottom: picks[feed.bottom]?.winner || series.bottom,
+      };
+    }),
+  }));
+}
+
+// After any pick change, walks all downstream series and clears picks whose
+// chosen team no longer appears in that slot (e.g. the user changed their R1
+// pick so R2 now shows a different team). Runs up to 3 passes to cascade all
+// the way from R2 → R3 → R4 in one call.
+function cleanDownstreamPicks(picks) {
+  let cleaned = picks;
+  for (let pass = 0; pass < 3; pass++) {
+    const resolved = resolveBracket(cleaned);
+    for (const round of resolved) {
+      for (const series of round.series) {
+        const pick = cleaned[series.id];
+        if (pick?.winner && pick.winner !== series.top && pick.winner !== series.bottom) {
+          cleaned = { ...cleaned, [series.id]: { ...pick, winner: undefined } };
+        }
+      }
+    }
+  }
+  return cleaned;
+}
+
 // ─── Series Card ──────────────────────────────────────────────────────────────
 
 function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results, onAdminSet }) {
@@ -324,7 +378,8 @@ export default function App() {
   function sanitize(name) { return name.trim().toLowerCase().replace(/[^a-z0-9]/g, "_"); }
 
   // ── Picks ──
-  const handlePick = (seriesId, pick) => setMyPicks(prev => ({ ...prev, [seriesId]: pick }));
+  const handlePick = (seriesId, pick) =>
+    setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
 
   const totalSeries  = BRACKET_CONFIG.rounds.flatMap(r => r.series).length;
   const pickedCount  = Object.values(myPicks).filter(p => p.winner && p.games).length;
@@ -442,7 +497,7 @@ export default function App() {
               </div>
             )}
 
-            {BRACKET_CONFIG.rounds.map(round => {
+            {resolveBracket(myPicks).map(round => {
               // Get matching results round
               const resultRound = results?.rounds?.find(r => r.id === round.id);
               return (
