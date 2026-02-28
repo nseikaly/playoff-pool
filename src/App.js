@@ -344,9 +344,7 @@ export default function App() {
   // ── Admin: set series result ──
   const handleAdminSet = async (seriesId, field, value) => {
     try {
-      await update(ref(db, `results/rounds`), {}); // ensure node exists
-
-      // Find round index and series index
+      // Find round and series indices
       let roundIdx = -1, seriesIdx = -1;
       BRACKET_CONFIG.rounds.forEach((r, ri) => {
         r.series.forEach((s, si) => {
@@ -355,10 +353,12 @@ export default function App() {
       });
       if (roundIdx === -1) return;
 
-      await update(ref(db, `results/rounds/${roundIdx}/series/${seriesIdx}`), { 
-        [field]: value,
-        id: seriesId 
-      });
+      // Update the specific field AND ensure id is saved
+      const updates = {};
+      updates[`results/rounds/${roundIdx}/series/${seriesIdx}/${field}`] = value;
+      updates[`results/rounds/${roundIdx}/series/${seriesIdx}/id`] = seriesId;
+      
+      await update(ref(db), updates);
       showToast("✓ Result saved");
     } catch (e) {
       showToast("Error saving result");
