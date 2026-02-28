@@ -357,7 +357,7 @@ export default function App() {
   };
 
   // ── Leaderboard ──
-  const leaderboard = buildLeaderboard(participants, results);
+  const leaderboard = buildLeaderboard(participants, results || {});
   const topPts      = leaderboard[0]?.points || 1;
   const myKey       = sanitize(myName);
 
