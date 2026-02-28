@@ -2,26 +2,24 @@ import { BRACKET_CONFIG } from "./bracketConfig";
 
 const { correctWinner, exactGames } = BRACKET_CONFIG.scoring;
 
+// Get a flat list of all series from results object
+export function allSeries(results) {
+  return (results?.rounds || []).flatMap(r => r.series.map(s => ({ ...s, multiplier: r.multiplier })));
+}
+
 // Calculate earned points for a set of picks against known results
 export function calcPoints(picks, results) {
   if (!picks || !results) return 0;
   let total = 0;
-  
-  BRACKET_CONFIG.rounds.forEach(round => {
-    round.series.forEach(series => {
-      const result = results[series.id];
-      if (!result?.winner) return;
-      
-      const pick = picks[series.id];
-      if (!pick?.winner) return;
-      
-      if (pick.winner === result.winner) {
-        total += correctWinner * round.multiplier;
-        if (pick.games === result.games) total += exactGames * round.multiplier;
-      }
-    });
+  allSeries(results).forEach(series => {
+    if (!series.winner) return;
+    const pick = picks[series.id];
+    if (!pick?.winner) return;
+    if (pick.winner === series.winner) {
+      total += correctWinner * series.multiplier;
+      if (pick.games === series.games) total += exactGames * series.multiplier;
+    }
   });
-  
   return total;
 }
 
@@ -29,43 +27,26 @@ export function calcPoints(picks, results) {
 export function maxPossible(picks, results) {
   if (!picks || !results) return 0;
   let potential = 0;
-  
-  BRACKET_CONFIG.rounds.forEach(round => {
-    round.series.forEach(series => {
-      const pick = picks[series.id];
-      if (!pick?.winner) return;
-      
-      const result = results[series.id];
-      if (!result?.winner) {
-        // Series not done yet — full points still possible
-        potential += (correctWinner + exactGames) * round.multiplier;
-      } else if (pick.winner === result.winner) {
-        // Won — count what was earned
-        potential += correctWinner * round.multiplier;
-        if (pick.games === result.games) potential += exactGames * round.multiplier;
-      }
-      // Wrong pick = 0 potential
-    });
+  allSeries(results).forEach(series => {
+    const pick = picks[series.id];
+    if (!pick?.winner) return;
+    if (!series.winner) {
+      // Series not done yet — full points still possible
+      potential += (correctWinner + exactGames) * series.multiplier;
+    } else if (pick.winner === series.winner) {
+      // Won — count what was earned
+      potential += correctWinner * series.multiplier;
+      if (pick.games === series.games) potential += exactGames * series.multiplier;
+    }
+    // Wrong pick = 0 potential
   });
-  
   return potential;
 }
 
 // Count how many series a participant got right
 export function countCorrect(picks, results) {
   if (!picks || !results) return 0;
-  let count = 0;
-  
-  BRACKET_CONFIG.rounds.forEach(round => {
-    round.series.forEach(series => {
-      const result = results[series.id];
-      if (result?.winner && picks[series.id]?.winner === result.winner) {
-        count++;
-      }
-    });
-  });
-  
-  return count;
+  return allSeries(results).filter(s => s.winner && picks[s.id]?.winner === s.winner).length;
 }
 
 // Build the leaderboard from a participants map
