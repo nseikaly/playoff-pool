@@ -35,21 +35,32 @@ export function calcPoints(picks, results) {
 
 // Calculate max points still achievable (earned + potential from incomplete series)
 export function maxPossible(picks, results) {
-  if (!picks || !results) return 0;
+  if (!picks) return 0;
   let potential = 0;
-  allSeries(results).forEach(series => {
-    const pick = picks[series.id];
-    if (!pick?.winner) return;
-    if (!series.winner) {
-      // Series not done yet — full points still possible
-      potential += (correctWinner + exactGames) * series.multiplier;
-    } else if (pick.winner === series.winner) {
-      // Won — count what was earned
-      potential += correctWinner * series.multiplier;
-      if (pick.games === series.games) potential += exactGames * series.multiplier;
-    }
-    // Wrong pick = 0 potential
+  
+  // Loop through ALL series in the bracket (not just ones with results)
+  BRACKET_CONFIG.rounds.forEach(round => {
+    round.series.forEach(series => {
+      const pick = picks[series.id];
+      if (!pick?.winner) return; // No pick = no potential
+      
+      // Find if this series has a result
+      const resultSeries = allSeries(results).find(s => s.id === series.id);
+      
+      if (!resultSeries?.winner) {
+        // Series not done yet — full points still possible
+        potential += (correctWinner + exactGames) * round.multiplier;
+      } else if (pick.winner === resultSeries.winner) {
+        // Won — count what was earned
+        potential += correctWinner * round.multiplier;
+        if (pick.games === resultSeries.games) {
+          potential += exactGames * round.multiplier;
+        }
+      }
+      // Wrong pick = 0 potential
+    });
   });
+  
   return potential;
 }
 
