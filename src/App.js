@@ -21,7 +21,7 @@ const css = `
   .hdr { padding:28px 0 0; display:flex; align-items:flex-end; justify-content:space-between; }
   .hdr-title { font-family:'Bebas Neue',sans-serif; font-size:2.8rem; letter-spacing:3px; line-height:1; }
   .hdr-title span { color:var(--gold); }
-  .hdr-sub { font-size:0.68rem; letter-spacing:3px; color:var(--text3); text-transform:uppercase; margin-top:4px; }
+  .hdr-sub { font-size:0.68rem; letter-spacing:3px; color:var(--text2); text-transform:uppercase; margin-top:4px; }
   .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
