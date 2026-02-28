@@ -3,6 +3,7 @@ import { ref, onValue, set, update } from "firebase/database";
 import { db } from "./firebase";
 import { BRACKET_CONFIG, GAME_OPTIONS, MAX_POINTS } from "./bracketConfig";
 import { buildLeaderboard, calcPoints, maxPossible } from "./scoring";
+import { TeamLogo } from "./teamLogos";
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 
@@ -59,15 +60,22 @@ const css = `
   .mult { font-size:0.63rem; color:var(--text3); font-family:'JetBrains Mono',monospace; }
 
   /* Teams */
-  .teams { display:grid; grid-template-columns:1fr auto 1fr; gap:6px; align-items:center; margin-bottom:10px; }
-  .tbtn { padding:8px 9px; background:var(--surface3); border:1px solid var(--border2); border-radius:4px;
-    color:var(--text); font-size:0.8rem; cursor:pointer; transition:all 0.15s; text-align:center; font-weight:500; }
-  .tbtn:hover { border-color:var(--gold); color:var(--gold); }
-  .tbtn.sel   { background:rgba(201,168,76,0.12); border-color:var(--gold); color:var(--gold2); font-weight:600; }
-  .tbtn.ok    { background:rgba(34,197,94,0.12); border-color:var(--green); color:var(--green); }
-  .tbtn.wrong { background:rgba(239,68,68,0.06); border-color:rgba(239,68,68,0.2); color:var(--text3); text-decoration:line-through; }
+  .teams { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; margin-bottom:10px; }
+  .tbtn { padding:14px 8px 12px; background:var(--surface3); border:1px solid var(--border2); border-radius:8px;
+    color:var(--text2); cursor:pointer; transition:all 0.18s; text-align:center; font-weight:500;
+    display:flex; flex-direction:column; align-items:center; gap:8px; width:100%; }
+  .tbtn:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
+  .tbtn:hover:not(:disabled) .tbtn-logo { filter:drop-shadow(0 0 7px rgba(201,168,76,0.45)); }
+  .tbtn.sel   { background:rgba(201,168,76,0.1); border-color:var(--gold); color:var(--gold2); }
+  .tbtn.sel   .tbtn-logo { filter:drop-shadow(0 0 8px rgba(240,198,90,0.55)); }
+  .tbtn.ok    { background:rgba(34,197,94,0.1); border-color:var(--green); color:var(--green); }
+  .tbtn.ok    .tbtn-logo { filter:drop-shadow(0 0 8px rgba(34,197,94,0.5)); }
+  .tbtn.wrong { background:rgba(239,68,68,0.05); border-color:rgba(239,68,68,0.18); color:var(--text3); }
+  .tbtn.wrong .tbtn-logo { opacity:0.45; filter:grayscale(0.6); }
+  .tbtn-logo  { transition:filter 0.18s, opacity 0.18s; flex-shrink:0; }
+  .tbtn-name  { font-size:0.72rem; line-height:1.3; font-weight:600; letter-spacing:0.2px; }
   .tbtn:disabled { cursor:default; }
-  .vs { color:var(--text3); font-size:0.68rem; text-align:center; }
+  .vs { color:var(--text3); font-size:0.68rem; text-align:center; font-weight:700; letter-spacing:1px; }
 
   /* Games row */
   .gr { display:flex; gap:5px; align-items:center; }
@@ -218,9 +226,15 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
       ) : (
         <>
           <div className="teams">
-            <button className={`tbtn ${teamClass(series.top)}`}    onClick={() => pickWinner(series.top)}    disabled={readOnly}>{series.top}</button>
+            <button className={`tbtn ${teamClass(series.top)}`}    onClick={() => pickWinner(series.top)}    disabled={readOnly}>
+              <span className="tbtn-logo"><TeamLogo name={series.top}    size={46} state={teamClass(series.top)}    /></span>
+              <span className="tbtn-name">{series.top}</span>
+            </button>
             <span className="vs">vs</span>
-            <button className={`tbtn ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly}>{series.bottom}</button>
+            <button className={`tbtn ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly}>
+              <span className="tbtn-logo"><TeamLogo name={series.bottom} size={46} state={teamClass(series.bottom)} /></span>
+              <span className="tbtn-name">{series.bottom}</span>
+            </button>
           </div>
           <div className="gr">
             <span className="gl">GAMES</span>
