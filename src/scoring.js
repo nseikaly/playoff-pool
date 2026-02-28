@@ -4,9 +4,16 @@ const { correctWinner, exactGames } = BRACKET_CONFIG.scoring;
 
 // Get a flat list of all series from results object
 export function allSeries(results) {
-  return (results?.rounds || []).flatMap(r => {
+  if (!results?.rounds) return [];
+  
+  // Firebase stores arrays as objects with numeric keys, so convert them
+  const roundsArray = Array.isArray(results.rounds) ? results.rounds : Object.values(results.rounds);
+  
+  return roundsArray.flatMap((r, roundIdx) => {
     const seriesArray = Array.isArray(r.series) ? r.series : Object.values(r.series || {});
-    return seriesArray.map(s => ({ ...s, multiplier: r.multiplier }));
+    // Get multiplier from BRACKET_CONFIG since Firebase doesn't store it
+    const multiplier = BRACKET_CONFIG.rounds[roundIdx]?.multiplier || 1;
+    return seriesArray.map(s => ({ ...s, multiplier }));
   });
 }
 
