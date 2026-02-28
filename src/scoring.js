@@ -4,7 +4,10 @@ const { correctWinner, exactGames } = BRACKET_CONFIG.scoring;
 
 // Get a flat list of all series from results object
 export function allSeries(results) {
-  return (results?.rounds || []).flatMap(r => r.series.map(s => ({ ...s, multiplier: r.multiplier })));
+  return (results?.rounds || []).flatMap(r => {
+    const seriesArray = Array.isArray(r.series) ? r.series : Object.values(r.series || {});
+    return seriesArray.map(s => ({ ...s, multiplier: r.multiplier }));
+  });
 }
 
 // Calculate earned points for a set of picks against known results
