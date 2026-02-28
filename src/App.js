@@ -166,6 +166,28 @@ const css = `
   .pbi { height:100%; background:var(--cyan); border-radius:2px; }
   .pct { font-family:'JetBrains Mono',monospace; color:var(--cyan); font-size:0.75rem; }
 
+  /* Picks lock banner */
+  .alert-locked { background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.35); color:var(--red); }
+
+  /* Lock toggle card (admin) */
+  .lock-card { display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:16px 20px; border-radius:8px; margin-bottom:20px; border:1px solid; transition:all 0.3s; }
+  .lock-card.unlocked { background:rgba(34,197,94,0.05); border-color:rgba(34,197,94,0.3); }
+  .lock-card.locked   { background:rgba(239,68,68,0.06); border-color:rgba(239,68,68,0.35); }
+  .lock-info { flex:1; min-width:0; }
+  .lock-title { font-family:'Bebas Neue',sans-serif; font-size:1rem; letter-spacing:2px; }
+  .lock-card.unlocked .lock-title { color:var(--green); }
+  .lock-card.locked   .lock-title { color:var(--red); }
+  .lock-desc { font-size:0.7rem; color:var(--text3); margin-top:3px; letter-spacing:0.5px; }
+  .toggle-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .toggle-lbl { font-size:0.65rem; letter-spacing:1.5px; color:var(--text3); text-transform:uppercase; font-family:'JetBrains Mono',monospace; }
+  .toggle { position:relative; display:inline-block; width:50px; height:27px; cursor:pointer; flex-shrink:0; }
+  .toggle input { opacity:0; width:0; height:0; position:absolute; }
+  .toggle-track { position:absolute; inset:0; background:var(--surface3); border:1px solid var(--border2); border-radius:14px; transition:all 0.25s; }
+  .toggle input:checked + .toggle-track { background:rgba(239,68,68,0.22); border-color:rgba(239,68,68,0.55); }
+  .toggle-thumb { position:absolute; top:3px; left:3px; width:19px; height:19px; background:var(--text3); border-radius:50%; transition:all 0.25s; box-shadow:0 1px 4px rgba(0,0,0,0.4); }
+  .toggle input:checked ~ .toggle-thumb { transform:translateX(23px); background:var(--red); box-shadow:0 0 8px rgba(239,68,68,0.5); }
+
   /* Admin gate */
   .admin-gate { max-width:360px; margin:60px auto 0; background:var(--surface); border:1px solid var(--border);
     border-radius:10px; padding:36px 28px; text-align:center; }
@@ -388,8 +410,9 @@ export default function App() {
   const [toast,       setToast]       = useState("");
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [adminAuthed, setAdminAuthed] = useState(false);
-  const [adminPass,   setAdminPass]   = useState("");
+  const [adminAuthed,  setAdminAuthed]  = useState(false);
+  const [adminPass,    setAdminPass]    = useState("");
+  const [picksLocked,  setPicksLocked]  = useState(false);
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -406,16 +429,21 @@ export default function App() {
       setParticipants(snap.exists() ? snap.val() : {});
     });
 
+    // Listen to picks lock state
+    const unsubLock = onValue(ref(db, "settings/picksLocked"), snap => {
+      setPicksLocked(snap.exists() ? snap.val() : false);
+    });
+
     // Load my own saved picks
     const savedName = localStorage.getItem("pool_name");
     if (savedName) {
       const unsubMe = onValue(ref(db, `participants/${sanitize(savedName)}/picks`), snap => {
         if (snap.exists()) setMyPicks(snap.val());
       });
-      return () => { unsubResults(); unsubParticipants(); unsubMe(); };
+      return () => { unsubResults(); unsubParticipants(); unsubLock(); unsubMe(); };
     }
 
-    return () => { unsubResults(); unsubParticipants(); };
+    return () => { unsubResults(); unsubParticipants(); unsubLock(); };
   }, []);
 
   const showToast = (msg) => {
@@ -468,6 +496,17 @@ export default function App() {
     } else {
       showToast("Incorrect password");
       setAdminPass("");
+    }
+  };
+
+  // ── Admin: picks lock toggle ──
+  const handleToggleLock = async () => {
+    try {
+      await set(ref(db, "settings/picksLocked"), !picksLocked);
+      showToast(picksLocked ? "✓ Picks unlocked" : "🔒 Picks locked");
+    } catch (e) {
+      showToast("Error updating lock state");
+      console.error(e);
     }
   };
 
@@ -552,9 +591,15 @@ export default function App() {
               <span>Max possible: <strong>{MAX_POINTS}pts</strong></span>
             </div>
 
-            {submitted && (
+            {picksLocked && (
+              <div className="alert alert-locked mb16">
+                🔒 Picks are locked — the pool deadline has passed. No new entries or changes are accepted.
+              </div>
+            )}
+
+            {!picksLocked && submitted && (
               <div className="alert alert-success mb16">
-                ✓ Picks submitted as <strong>{myName}</strong>. You can update and resubmit any time before series start.
+                ✓ Picks submitted as <strong>{myName}</strong>. You can update and resubmit any time before the deadline.
               </div>
             )}
 
@@ -574,6 +619,7 @@ export default function App() {
                           key={series.id} series={merged} round={round}
                           picks={myPicks} onPick={handlePick}
                           results={results}
+                          readOnly={picksLocked}
                         />
                       );
                     })}
@@ -588,19 +634,22 @@ export default function App() {
               <div className="g2">
                 <div>
                   <label className="fl">Your Name *</label>
-                  <input className="fi" placeholder="e.g. Mike Jordan" value={myName} onChange={e => setMyName(e.target.value)} disabled={submitted} />
+                  <input className="fi" placeholder="e.g. Mike Jordan" value={myName} onChange={e => setMyName(e.target.value)} disabled={submitted || picksLocked} />
                 </div>
                 <div>
                   <label className="fl">Email (optional)</label>
-                  <input className="fi" type="email" placeholder="for updates" value={myEmail} onChange={e => setMyEmail(e.target.value)} />
+                  <input className="fi" type="email" placeholder="for updates" value={myEmail} onChange={e => setMyEmail(e.target.value)} disabled={picksLocked} />
                 </div>
               </div>
               <div className="row gap8 wrap">
-                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || saving}>
+                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || saving || picksLocked}>
                   {saving ? "Saving…" : submitted ? "Update Picks" : "Submit Picks"}
                 </button>
-                <span className="sm muted">{pickedCount}/{totalSeries} series picked</span>
-                {!allPicked && <span className="xs muted">({totalSeries - pickedCount} to go)</span>}
+                {picksLocked
+                  ? <span className="xs" style={{color:"var(--red)"}}>🔒 Picks locked</span>
+                  : <><span className="sm muted">{pickedCount}/{totalSeries} series picked</span>
+                    {!allPicked && <span className="xs muted">({totalSeries - pickedCount} to go)</span>}</>
+                }
               </div>
             </div>
           </div>
@@ -729,6 +778,26 @@ export default function App() {
 
         {tab === "admin" && adminAuthed && (
           <div>
+            {/* Lock toggle */}
+            <div className={`lock-card ${picksLocked ? "locked" : "unlocked"}`}>
+              <div className="lock-info">
+                <div className="lock-title">{picksLocked ? "🔒 Picks Locked" : "✓ Picks Open"}</div>
+                <div className="lock-desc">
+                  {picksLocked
+                    ? "Pool is closed — participants cannot enter or change picks."
+                    : "Pool is open — participants can enter and update their picks."}
+                </div>
+              </div>
+              <div className="toggle-wrap">
+                <span className="toggle-lbl">{picksLocked ? "Locked" : "Open"}</span>
+                <label className="toggle">
+                  <input type="checkbox" checked={picksLocked} onChange={handleToggleLock} />
+                  <span className="toggle-track" />
+                  <span className="toggle-thumb" />
+                </label>
+              </div>
+            </div>
+
             <div className="alert alert-warn mb16">
               ⚠ Admin panel — enter series results here. Standings update automatically for all users.
             </div>
