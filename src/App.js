@@ -543,6 +543,13 @@ export default function App() {
   // ── Pool stats ──
   const completedCount = (results?.rounds || []).flatMap(r => r.series).filter(s => s.winner).length;
 
+  // ── Admin: resolve bracket using actual results so later rounds show real team names ──
+  const resultsAsPicks = {};
+  (results?.rounds || []).flatMap(r => r.series || []).forEach(s => {
+    if (s?.id && s?.winner) resultsAsPicks[s.id] = { winner: s.winner, games: s.games };
+  });
+  const resolvedAdminRounds = resolveBracket(resultsAsPicks);
+
   if (loading) return (
     <>
       <style>{css}</style>
@@ -802,7 +809,7 @@ export default function App() {
               ⚠ Admin panel — enter series results here. Standings update automatically for all users.
             </div>
 
-            {BRACKET_CONFIG.rounds.map((round, ri) => {
+            {resolvedAdminRounds.map((round, ri) => {
               const resultRound = results?.rounds?.[ri];
               return (
                 <div key={round.id}>
