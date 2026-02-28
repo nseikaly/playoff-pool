@@ -6,13 +6,13 @@ import { initializeApp } from "firebase/app";
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey:            "PASTE_YOUR_apiKey_HERE",
-  authDomain:        "PASTE_YOUR_authDomain_HERE",
-  databaseURL:       "PASTE_YOUR_databaseURL_HERE",
-  projectId:         "PASTE_YOUR_projectId_HERE",
-  storageBucket:     "PASTE_YOUR_storageBucket_HERE",
-  messagingSenderId: "PASTE_YOUR_messagingSenderId_HERE",
-  appId:             "PASTE_YOUR_appId_HERE"
+  apiKey:            "AIzaSyA1yIy-U9MxXlBtLyrvwgGEZnZYBrBMV90",
+  authDomain:        "playoff-pool-2efdb.firebaseapp.com",
+  databaseURL:       "https://playoff-pool-2efdb-default-rtdb.firebaseio.com",
+  projectId:         "playoff-pool-2efdb",
+  storageBucket:     "playoff-pool-2efdb.firebasestorage.app",
+  messagingSenderId: "440876259367",
+  appId:             "1:440876259367:web:9ba463290e5f7aa4069602"
 };
 
 const app = initializeApp(firebaseConfig);
