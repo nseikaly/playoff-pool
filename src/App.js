@@ -5,6 +5,13 @@ import { BRACKET_CONFIG, GAME_OPTIONS, MAX_POINTS } from "./bracketConfig";
 import { buildLeaderboard, calcPoints, maxPossible } from "./scoring";
 import { TeamLogo } from "./teamLogos";
 
+// ─── Seed lookup (team name → playoff seed) built from R1 config ─────────────
+const TEAM_SEEDS = {};
+BRACKET_CONFIG.rounds[0].series.forEach(s => {
+  if (s.topSeed    != null) TEAM_SEEDS[s.top]    = s.topSeed;
+  if (s.bottomSeed != null) TEAM_SEEDS[s.bottom] = s.bottomSeed;
+});
+
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 
 const css = `
@@ -61,9 +68,9 @@ const css = `
 
   /* Teams */
   .teams { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; margin-bottom:10px; }
-  .tbtn { padding:14px 8px 12px; background:var(--surface3); border:1px solid var(--border2); border-radius:8px;
+  .tbtn { padding:14px 8px 18px; background:var(--surface3); border:1px solid var(--border2); border-radius:8px;
     color:var(--text2); cursor:pointer; transition:all 0.18s; text-align:center; font-weight:500;
-    display:flex; flex-direction:column; align-items:center; gap:8px; width:100%; }
+    display:flex; flex-direction:column; align-items:center; gap:8px; width:100%; position:relative; }
   .tbtn:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
   .tbtn:hover:not(:disabled) .tbtn-logo { filter:drop-shadow(0 0 7px rgba(201,168,76,0.45)); }
   .tbtn.sel   { background:rgba(201,168,76,0.1); border-color:var(--gold); color:var(--gold2); }
@@ -76,6 +83,23 @@ const css = `
   .tbtn-name  { font-size:0.72rem; line-height:1.3; font-weight:600; letter-spacing:0.2px; }
   .tbtn:disabled { cursor:default; }
   .vs { color:var(--text3); font-size:0.68rem; text-align:center; font-weight:700; letter-spacing:1px; }
+
+  /* Seed matchup badge (next to conf label) */
+  .seed-vs { font-size:0.58rem; font-family:'JetBrains Mono',monospace; font-weight:700; letter-spacing:1.5px;
+    padding:2px 7px; border-radius:2px; border:1px solid var(--border); background:rgba(255,255,255,0.02);
+    color:var(--text3); white-space:nowrap; }
+  .seed-vs-East { color:rgba(123,159,245,0.9); text-shadow:0 0 10px rgba(123,159,245,0.3); border-color:rgba(59,91,219,0.25); }
+  .seed-vs-West { color:rgba(251,146,60,0.9);  text-shadow:0 0 10px rgba(251,146,60,0.3);  border-color:rgba(194,65,12,0.25); }
+  .seed-vs-Finals { color:rgba(240,198,90,0.85); text-shadow:0 0 10px rgba(240,198,90,0.3); border-color:rgba(201,168,76,0.25); }
+
+  /* Seed badge (bottom-right of team button) */
+  .tbtn-seed { position:absolute; bottom:6px; right:8px; font-size:0.6rem; font-family:'JetBrains Mono',monospace;
+    font-weight:800; color:var(--text3); line-height:1; opacity:0.55;
+    transition:color 0.18s, opacity 0.18s, text-shadow 0.18s; letter-spacing:0; }
+  .tbtn.sel   .tbtn-seed { color:var(--gold2); opacity:1; text-shadow:0 0 8px rgba(240,198,90,0.45); }
+  .tbtn.ok    .tbtn-seed { color:var(--green); opacity:1; text-shadow:0 0 8px rgba(34,197,94,0.45); }
+  .tbtn.wrong .tbtn-seed { opacity:0.2; }
+  .tbtn:hover:not(:disabled) .tbtn-seed { color:var(--gold); opacity:1; }
 
   /* Games row */
   .gr { display:flex; gap:5px; align-items:center; }
@@ -246,6 +270,11 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const result  = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
 
+  // Seed resolution — works for any round once teams are known
+  const topSeed    = TEAM_SEEDS[series.top];
+  const bottomSeed = TEAM_SEEDS[series.bottom];
+  const showSeedVs = topSeed != null && bottomSeed != null;
+
   const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
   const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
 
@@ -268,11 +297,18 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   return (
     <div className={`sc ${settled ? "done" : ""}`}>
       <div className="sc-top">
-        <span className={`conf conf-${series.conference}`}>{series.conference}</span>
-        <span className="mult">{round.winnerPoints}+{round.gamesPoints}pts</span>
-        {settled && (
-          <span className="xs mono green">✓ {result.winner} in {result.games}</span>
-        )}
+        <div style={{display:"flex", alignItems:"center", gap:"7px"}}>
+          <span className={`conf conf-${series.conference}`}>{series.conference}</span>
+          {showSeedVs && (
+            <span className={`seed-vs seed-vs-${series.conference}`}>{topSeed} vs {bottomSeed}</span>
+          )}
+        </div>
+        <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
+          <span className="mult">{round.winnerPoints}+{round.gamesPoints}pts</span>
+          {settled && (
+            <span className="xs mono green">✓ {result.winner} in {result.games}</span>
+          )}
+        </div>
       </div>
 
       {adminMode ? (
@@ -283,11 +319,13 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
             <button className={`tbtn ${teamClass(series.top)}`}    onClick={() => pickWinner(series.top)}    disabled={readOnly}>
               <span className="tbtn-logo"><TeamLogo name={series.top}    size={46} state={teamClass(series.top)}    /></span>
               <span className="tbtn-name">{series.top}</span>
+              {topSeed != null && <span className="tbtn-seed">#{topSeed}</span>}
             </button>
             <span className="vs">vs</span>
             <button className={`tbtn ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly}>
               <span className="tbtn-logo"><TeamLogo name={series.bottom} size={46} state={teamClass(series.bottom)} /></span>
               <span className="tbtn-name">{series.bottom}</span>
+              {bottomSeed != null && <span className="tbtn-seed">#{bottomSeed}</span>}
             </button>
           </div>
           <div className="gr">
