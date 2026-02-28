@@ -184,8 +184,8 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const result  = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
 
-  const pickWinner = (team) => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, winner: team }); };
-  const pickGames  = (g)    => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, games: g }); };
+  const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
+  const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
 
   const teamClass = (team) => {
     if (adminMode) return "";
@@ -207,7 +207,7 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
     <div className={`sc ${settled ? "done" : ""}`}>
       <div className="sc-top">
         <span className={`conf conf-${series.conference}`}>{series.conference}</span>
-        <span className="mult">×{round.multiplier} multiplier</span>
+        <span className="mult">{round.winnerPoints}+{round.gamesPoints}pts</span>
         {settled && (
           <span className="xs mono green">✓ {result.winner} in {result.games}</span>
         )}
@@ -344,7 +344,9 @@ export default function App() {
   // ── Admin: set series result ──
   const handleAdminSet = async (seriesId, field, value) => {
     try {
-      // Find round and series indices
+      await update(ref(db, `results/rounds`), {}); // ensure node exists
+
+      // Find round index and series index
       let roundIdx = -1, seriesIdx = -1;
       BRACKET_CONFIG.rounds.forEach((r, ri) => {
         r.series.forEach((s, si) => {
@@ -353,12 +355,7 @@ export default function App() {
       });
       if (roundIdx === -1) return;
 
-      // Update the specific field AND ensure id is saved
-      const updates = {};
-      updates[`results/rounds/${roundIdx}/series/${seriesIdx}/${field}`] = value;
-      updates[`results/rounds/${roundIdx}/series/${seriesIdx}/id`] = seriesId;
-      
-      await update(ref(db), updates);
+      await update(ref(db, `results/rounds/${roundIdx}/series/${seriesIdx}`), { [field]: value });
       showToast("✓ Result saved");
     } catch (e) {
       showToast("Error saving result");
@@ -367,7 +364,7 @@ export default function App() {
   };
 
   // ── Leaderboard ──
-  const leaderboard = buildLeaderboard(participants, results || { rounds: [] });
+  const leaderboard = buildLeaderboard(participants, results);
   const topPts      = leaderboard[0]?.points || 1;
   const myKey       = sanitize(myName);
 
@@ -414,9 +411,11 @@ export default function App() {
         {tab === "picks" && (
           <div>
             <div className="legend">
-              <span>Correct winner: <strong>{BRACKET_CONFIG.scoring.correctWinner}pts</strong> × round multiplier</span>
-              <span>Exact game count: <strong>+{BRACKET_CONFIG.scoring.exactGames}pts</strong> × round multiplier</span>
-              <span>R1×1 · Semis×2 · Conf Finals×4 · Finals×8</span>
+              <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
+              <span>Semis: Winner <strong>20pts</strong> + Games <strong>5pts</strong></span>
+              <span>Conf Finals: Winner <strong>30pts</strong> + Games <strong>10pts</strong></span>
+              <span>Finals: Winner <strong>40pts</strong> + Games <strong>10pts</strong></span>
+              <span className="text-xs text-muted">(Games points only awarded if winner is correct)</span>
               <span>Max possible: <strong>{MAX_POINTS}pts</strong></span>
             </div>
 
@@ -431,7 +430,7 @@ export default function App() {
               const resultRound = results?.rounds?.find(r => r.id === round.id);
               return (
                 <div key={round.id}>
-                  <div className="sec">{round.name} <span className="xs mono muted">×{round.multiplier}</span></div>
+                  <div className="sec">{round.name} <span className="xs mono muted">{round.winnerPoints}+{round.gamesPoints}pts</span></div>
                   <div className="series-grid">
                     {round.series.map((series, si) => {
                       // Merge result data into series for display
