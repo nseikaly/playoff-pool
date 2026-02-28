@@ -13,14 +13,14 @@ export const BRACKET_CONFIG = {
       winnerPoints: 10,
       gamesPoints: 5,
       series: [
-        { id:"s1",  top:"Boston Celtics",          bottom:"Miami Heat",           conference:"East" },
-        { id:"s2",  top:"Milwaukee Bucks",          bottom:"Indiana Pacers",       conference:"East" },
-        { id:"s3",  top:"Cleveland Cavaliers",      bottom:"Orlando Magic",        conference:"East" },
-        { id:"s4",  top:"New York Knicks",          bottom:"Philadelphia 76ers",   conference:"East" },
-        { id:"s5",  top:"Oklahoma City Thunder",    bottom:"New Orleans Pelicans", conference:"West" },
-        { id:"s6",  top:"Denver Nuggets",           bottom:"LA Lakers",            conference:"West" },
-        { id:"s7",  top:"Minnesota Timberwolves",   bottom:"Phoenix Suns",         conference:"West" },
-        { id:"s8",  top:"LA Clippers",              bottom:"Dallas Mavericks",     conference:"West" },
+        { id:"s1",  top:"Boston Celtics",          bottom:"Miami Heat",           conference:"East", topSeed:1, bottomSeed:8 },
+        { id:"s2",  top:"Milwaukee Bucks",          bottom:"Indiana Pacers",       conference:"East", topSeed:2, bottomSeed:7 },
+        { id:"s3",  top:"Cleveland Cavaliers",      bottom:"Orlando Magic",        conference:"East", topSeed:3, bottomSeed:6 },
+        { id:"s4",  top:"New York Knicks",          bottom:"Philadelphia 76ers",   conference:"East", topSeed:4, bottomSeed:5 },
+        { id:"s5",  top:"Oklahoma City Thunder",    bottom:"New Orleans Pelicans", conference:"West", topSeed:1, bottomSeed:8 },
+        { id:"s6",  top:"Denver Nuggets",           bottom:"LA Lakers",            conference:"West", topSeed:2, bottomSeed:7 },
+        { id:"s7",  top:"Minnesota Timberwolves",   bottom:"Phoenix Suns",         conference:"West", topSeed:3, bottomSeed:6 },
+        { id:"s8",  top:"LA Clippers",              bottom:"Dallas Mavericks",     conference:"West", topSeed:4, bottomSeed:5 },
       ]
     },
     {
