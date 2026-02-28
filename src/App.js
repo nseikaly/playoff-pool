@@ -169,6 +169,41 @@ const css = `
   /* Picks lock banner */
   .alert-locked { background:rgba(239,68,68,0.07); border:1px solid rgba(239,68,68,0.35); color:var(--red); }
 
+  /* Clickable leaderboard rows */
+  .lbr.clickable { cursor:pointer; }
+  .lbr.clickable:hover { border-color:var(--gold) !important; background:rgba(201,168,76,0.05); }
+  .lbr-view { font-size:0.6rem; letter-spacing:1.5px; color:var(--text3); text-transform:uppercase;
+    font-family:'JetBrains Mono',monospace; margin-top:4px; transition:color 0.15s; }
+  .lbr.clickable:hover .lbr-view { color:var(--gold); }
+
+  /* Picks overlay */
+  .ov-backdrop { position:fixed; inset:0; background:rgba(4,7,13,0.88); z-index:200;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:32px 16px 48px; overflow-y:auto; backdrop-filter:blur(4px);
+    animation:ov-fade 0.2s ease; }
+  @keyframes ov-fade { from{opacity:0} to{opacity:1} }
+  .ov-modal { background:var(--surface); border:1px solid var(--border2); border-radius:12px;
+    width:100%; max-width:720px; display:flex; flex-direction:column;
+    animation:ov-rise 0.25s ease; flex-shrink:0; }
+  @keyframes ov-rise { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+  .ov-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px;
+    padding:20px 22px; border-bottom:1px solid var(--border); }
+  .ov-hdr-left { min-width:0; }
+  .ov-title { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; letter-spacing:3px;
+    color:var(--text); line-height:1; }
+  .ov-sub { font-size:0.68rem; color:var(--text3); letter-spacing:1.5px; margin-top:5px; text-transform:uppercase; }
+  .ov-close { width:34px; height:34px; flex-shrink:0; background:var(--surface2);
+    border:1px solid var(--border2); border-radius:7px; color:var(--text2);
+    cursor:pointer; font-size:1.1rem; display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s; line-height:1; }
+  .ov-close:hover { border-color:var(--gold); color:var(--gold); }
+  .ov-body { padding:20px 22px 28px; }
+  .ov-score-row { display:flex; gap:20px; flex-wrap:wrap; padding:12px 16px;
+    background:var(--surface2); border:1px solid var(--border); border-radius:6px; margin-bottom:20px; }
+  .ov-score-item { text-align:center; }
+  .ov-score-val { font-family:'Bebas Neue',sans-serif; font-size:1.6rem; color:var(--gold); line-height:1; }
+  .ov-score-lbl { font-size:0.6rem; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-top:2px; }
+
   /* Lock toggle card (admin) */
   .lock-card { display:flex; align-items:center; justify-content:space-between; gap:16px;
     padding:16px 20px; border-radius:8px; margin-bottom:20px; border:1px solid; transition:all 0.3s; }
@@ -413,6 +448,7 @@ export default function App() {
   const [adminAuthed,  setAdminAuthed]  = useState(false);
   const [adminPass,    setAdminPass]    = useState("");
   const [picksLocked,  setPicksLocked]  = useState(false);
+  const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -672,6 +708,12 @@ export default function App() {
               </div>
             </div>
 
+            {picksLocked && (
+              <div className="alert alert-info mb16" style={{fontSize:"0.75rem"}}>
+                🔒 Picks are locked — tap any entry to view their bracket.
+              </div>
+            )}
+
             {leaderboard.length === 0 ? (
               <div className="empty">
                 <h3>No Picks Yet</h3>
@@ -682,8 +724,13 @@ export default function App() {
                 {leaderboard.map((p, i) => {
                   const isMe = sanitize(p.name || "") === myKey;
                   const rankClass = isMe ? "me" : i === 0 ? "r1" : i === 1 ? "r2" : i === 2 ? "r3" : "";
+                  const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   return (
-                    <div key={p.id} className={`lbr ${rankClass}`}>
+                    <div
+                      key={p.id}
+                      className={`lbr ${rankClass} ${canView ? "clickable" : ""}`}
+                      onClick={canView ? () => setViewingEntry(p) : undefined}
+                    >
                       <div className="rank">{i + 1}</div>
                       <div>
                         <div className="lbn">
@@ -692,6 +739,7 @@ export default function App() {
                         <div className="pb">
                           <div className="pbf" style={{width:`${topPts ? (p.points/topPts)*100 : 0}%`}} />
                         </div>
+                        {canView && <div className="lbr-view">tap to view picks →</div>}
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div className="pts">{p.points}</div>
@@ -851,6 +899,69 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* ══ PICKS OVERLAY ══════════════════════════════════════════════════ */}
+      {viewingEntry && (() => {
+        const ep     = viewingEntry;
+        const epPicked = Object.values(ep.picks || {}).filter(pk => pk.winner && pk.games).length;
+        const resolvedRounds = resolveBracket(ep.picks || {});
+        return (
+          <div className="ov-backdrop" onClick={e => { if (e.target === e.currentTarget) setViewingEntry(null); }}>
+            <div className="ov-modal">
+              {/* Header */}
+              <div className="ov-hdr">
+                <div className="ov-hdr-left">
+                  <div className="ov-title">{ep.name}'s Picks</div>
+                  <div className="ov-sub">{epPicked}/{totalSeries} picks · {BRACKET_CONFIG.season}</div>
+                </div>
+                <button className="ov-close" onClick={() => setViewingEntry(null)}>✕</button>
+              </div>
+
+              {/* Score summary bar */}
+              <div className="ov-body">
+                <div className="ov-score-row">
+                  <div className="ov-score-item">
+                    <div className="ov-score-val">{ep.points}</div>
+                    <div className="ov-score-lbl">Points</div>
+                  </div>
+                  <div className="ov-score-item">
+                    <div className="ov-score-val" style={{color:"var(--cyan)"}}>{ep.maxPts}</div>
+                    <div className="ov-score-lbl">Max Possible</div>
+                  </div>
+                  <div className="ov-score-item">
+                    <div className="ov-score-val" style={{color:"var(--green)"}}>{ep.correct}</div>
+                    <div className="ov-score-lbl">Correct</div>
+                  </div>
+                </div>
+
+                {/* All rounds — read-only SeriesCards */}
+                {resolvedRounds.map(round => {
+                  const resultRound = results?.rounds?.find(r => r.id === round.id);
+                  return (
+                    <div key={round.id}>
+                      <div className="sec">{round.name} <span className="xs mono">{round.winnerPoints}+{round.gamesPoints}pts</span></div>
+                      <div className="series-grid">
+                        {round.series.map((series, si) => {
+                          const rs = resultRound?.series?.[si] || series;
+                          const merged = { ...series, winner: rs.winner, games: rs.games };
+                          return (
+                            <SeriesCard
+                              key={series.id} series={merged} round={round}
+                              picks={ep.picks || {}}
+                              results={results}
+                              readOnly
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {toast && <div className="toast">{toast}</div>}
     </>
