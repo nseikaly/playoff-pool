@@ -181,11 +181,11 @@ const css = `
 
 function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results, onAdminSet }) {
   const pick    = picks?.[series.id] || {};
-  const result  = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
+  const result  = results?.[series.id]; // Direct lookup by series ID
   const settled = result?.winner != null;
 
-  const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
-  const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
+  const pickWinner = (team) => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, winner: team }); };
+  const pickGames  = (g)    => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, games: g }); };
 
   const teamClass = (team) => {
     if (adminMode) return "";
@@ -218,17 +218,17 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
       ) : (
         <>
           <div className="teams">
-            <button className={`tbtn ${teamClass(series.top)}`}    onClick={() => pickWinner(series.top)}    disabled={readOnly}>{series.top}</button>
+            <button className={`tbtn ${teamClass(series.top)}`}    onClick={() => pickWinner(series.top)}    disabled={readOnly || settled}>{series.top}</button>
             <span className="vs">vs</span>
-            <button className={`tbtn ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly}>{series.bottom}</button>
+            <button className={`tbtn ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly || settled}>{series.bottom}</button>
           </div>
           <div className="gr">
             <span className="gl">GAMES</span>
             {GAME_OPTIONS.map(g => (
-              <button key={g} className={`gbtn ${gamesClass(g)}`} onClick={() => pickGames(g)} disabled={readOnly}>{g}</button>
+              <button key={g} className={`gbtn ${gamesClass(g)}`} onClick={() => pickGames(g)} disabled={readOnly || settled}>{g}</button>
             ))}
             <span className={`ps ${hasPick ? "ok" : "pending"}`}>
-              {hasPick ? "✓ picked" : "incomplete"}
+              {settled ? "locked" : hasPick ? "✓ picked" : "incomplete"}
             </span>
           </div>
         </>
@@ -276,10 +276,10 @@ export default function App() {
 
   // ── Firebase listeners ──
   useEffect(() => {
-    // Listen to results (admin sets these)
+    // Listen to results (admin sets these - now keyed by series ID)
     const unsubResults = onValue(ref(db, "results"), snap => {
-      if (snap.exists()) setResults(snap.val());
-      else setResults(BRACKET_CONFIG); // default: use bracket config as skeleton
+      const resultsData = snap.exists() ? snap.val() : {};
+      setResults(resultsData);
       setLoading(false);
     });
 
@@ -344,18 +344,11 @@ export default function App() {
   // ── Admin: set series result ──
   const handleAdminSet = async (seriesId, field, value) => {
     try {
-      await update(ref(db, `results/rounds`), {}); // ensure node exists
-
-      // Find round index and series index
-      let roundIdx = -1, seriesIdx = -1;
-      BRACKET_CONFIG.rounds.forEach((r, ri) => {
-        r.series.forEach((s, si) => {
-          if (s.id === seriesId) { roundIdx = ri; seriesIdx = si; }
-        });
+      // Save directly by series ID for easy lookup
+      await update(ref(db, `results/${seriesId}`), { 
+        [field]: value,
+        id: seriesId 
       });
-      if (roundIdx === -1) return;
-
-      await update(ref(db, `results/rounds/${roundIdx}/series/${seriesIdx}`), { [field]: value });
       showToast("✓ Result saved");
     } catch (e) {
       showToast("Error saving result");
@@ -369,7 +362,7 @@ export default function App() {
   const myKey       = sanitize(myName);
 
   // ── Pool stats ──
-  const completedCount = (results?.rounds || []).flatMap(r => r.series).filter(s => s.winner).length;
+  const completedCount = Object.values(results || {}).filter(r => r?.winner).length;
 
   if (loading) return (
     <>
@@ -424,19 +417,14 @@ export default function App() {
             )}
 
             {BRACKET_CONFIG.rounds.map(round => {
-              // Get matching results round
-              const resultRound = results?.rounds?.find(r => r.id === round.id);
               return (
                 <div key={round.id}>
                   <div className="sec">{round.name} <span className="xs mono muted">×{round.multiplier}</span></div>
                   <div className="series-grid">
-                    {round.series.map((series, si) => {
-                      // Merge result data into series for display
-                      const rs = resultRound?.series?.[si] || series;
-                      const merged = { ...series, winner: rs.winner, games: rs.games };
+                    {round.series.map((series) => {
                       return (
                         <SeriesCard
-                          key={series.id} series={merged} round={round}
+                          key={series.id} series={series} round={round}
                           picks={myPicks} onPick={handlePick}
                           results={results}
                         />
@@ -533,17 +521,16 @@ export default function App() {
               </div>
             </div>
 
-            {BRACKET_CONFIG.rounds.map((round, ri) => {
-              const resultRound = results?.rounds?.[ri];
-              const completedSeries = round.series.filter((_, si) => resultRound?.series?.[si]?.winner);
-              if (completedSeries.length === 0) return null;
+            {BRACKET_CONFIG.rounds.map((round) => {
+              const completedInRound = round.series.filter(s => results?.[s.id]?.winner);
+              if (completedInRound.length === 0) return null;
 
               return (
                 <div key={round.id}>
                   <div className="sec">{round.name} — Pick Distribution</div>
-                  {round.series.map((series, si) => {
-                    const rs = resultRound?.series?.[si];
-                    if (!rs?.winner) return null;
+                  {round.series.map((series) => {
+                    const result = results?.[series.id];
+                    if (!result?.winner) return null;
                     const total = Object.keys(participants).length;
                     const pickTop = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.top).length;
                     const pickBot = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.bottom).length;
@@ -555,8 +542,8 @@ export default function App() {
                       const pct = total ? Math.round((count/total)*100) : 0;
                       return (
                         <div key={team} className="pr">
-                          <span style={{color: rs.winner === team ? "var(--green)" : "var(--text2)"}}>
-                            {team} {rs.winner === team && "✓"}
+                          <span style={{color: result.winner === team ? "var(--green)" : "var(--text2)"}}>
+                            {team} {result.winner === team && "✓"}
                           </span>
                           <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
                           <span className="pct">{pct}%</span>
@@ -581,17 +568,15 @@ export default function App() {
               ⚠ Admin panel — enter series results here. Standings update automatically for all users.
             </div>
 
-            {BRACKET_CONFIG.rounds.map((round, ri) => {
-              const resultRound = results?.rounds?.[ri];
+            {BRACKET_CONFIG.rounds.map((round) => {
               return (
                 <div key={round.id}>
                   <div className="sec">{round.name}</div>
-                  {round.series.map((series, si) => {
-                    const rs = resultRound?.series?.[si] || {};
-                    const merged = { ...series, winner: rs.winner || null, games: rs.games || null };
+                  {round.series.map((series) => {
+                    const result = results?.[series.id] || {};
                     return (
                       <div key={series.id} className="asc">
-                        <AdminControl series={merged} result={rs} onAdminSet={handleAdminSet} />
+                        <AdminControl series={series} result={result} onAdminSet={handleAdminSet} />
                       </div>
                     );
                   })}
