@@ -7,15 +7,11 @@ export const BRACKET_CONFIG = {
   sport:  "NBA",
   season: "2025 Playoffs",
 
-  // Scoring: points awarded per correct pick, multiplied by the round multiplier
-  scoring: {
-    correctWinner: 5,   // pts for picking the right team
-    exactGames:    3,   // bonus pts for exact number of games
-  },
-
   rounds: [
     {
-      id: "r1", name: "First Round", multiplier: 1,
+      id: "r1", name: "First Round",
+      winnerPoints: 10,
+      gamesPoints: 5,
       series: [
         { id:"s1",  top:"Boston Celtics",          bottom:"Miami Heat",           conference:"East" },
         { id:"s2",  top:"Milwaukee Bucks",          bottom:"Indiana Pacers",       conference:"East" },
@@ -28,7 +24,9 @@ export const BRACKET_CONFIG = {
       ]
     },
     {
-      id: "r2", name: "Conference Semifinals", multiplier: 2,
+      id: "r2", name: "Conference Semifinals",
+      winnerPoints: 20,
+      gamesPoints: 5,
       series: [
         { id:"s9",  top:"East R1 Winner (1/8)", bottom:"East R1 Winner (4/5)", conference:"East" },
         { id:"s10", top:"East R1 Winner (2/7)", bottom:"East R1 Winner (3/6)", conference:"East" },
@@ -37,14 +35,18 @@ export const BRACKET_CONFIG = {
       ]
     },
     {
-      id: "r3", name: "Conference Finals", multiplier: 4,
+      id: "r3", name: "Conference Finals",
+      winnerPoints: 30,
+      gamesPoints: 10,
       series: [
         { id:"s13", top:"East Semifinal Winner A", bottom:"East Semifinal Winner B", conference:"East" },
         { id:"s14", top:"West Semifinal Winner A", bottom:"West Semifinal Winner B", conference:"West" },
       ]
     },
     {
-      id: "r4", name: "NBA Finals", multiplier: 8,
+      id: "r4", name: "NBA Finals",
+      winnerPoints: 40,
+      gamesPoints: 10,
       series: [
         { id:"s15", top:"Eastern Champion", bottom:"Western Champion", conference:"Finals" },
       ]
@@ -56,5 +58,5 @@ export const GAME_OPTIONS = [4, 5, 6, 7];
 
 // Max points possible in the pool
 export const MAX_POINTS = BRACKET_CONFIG.rounds.reduce((acc, r) =>
-  acc + r.series.length * (BRACKET_CONFIG.scoring.correctWinner + BRACKET_CONFIG.scoring.exactGames) * r.multiplier, 0
+  acc + r.series.length * (r.winnerPoints + r.gamesPoints), 0
 );
