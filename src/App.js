@@ -184,8 +184,8 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const result  = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
 
-  const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
-  const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
+  const pickWinner = (team) => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, winner: team }); };
+  const pickGames  = (g)    => { if (!readOnly && !adminMode && !settled) onPick(series.id, { ...pick, games: g }); };
 
   const teamClass = (team) => {
     if (adminMode) return "";
@@ -355,7 +355,10 @@ export default function App() {
       });
       if (roundIdx === -1) return;
 
-      await update(ref(db, `results/rounds/${roundIdx}/series/${seriesIdx}`), { [field]: value });
+      await update(ref(db, `results/rounds/${roundIdx}/series/${seriesIdx}`), { 
+        [field]: value,
+        id: seriesId 
+      });
       showToast("✓ Result saved");
     } catch (e) {
       showToast("Error saving result");
