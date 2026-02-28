@@ -1,7 +1,5 @@
 import { BRACKET_CONFIG } from "./bracketConfig";
 
-const { correctWinner, exactGames } = BRACKET_CONFIG.scoring;
-
 // Get a flat list of all series from results object
 export function allSeries(results) {
   if (!results?.rounds) return [];
@@ -11,9 +9,11 @@ export function allSeries(results) {
   
   return roundsArray.flatMap((r, roundIdx) => {
     const seriesArray = Array.isArray(r.series) ? r.series : Object.values(r.series || {});
-    // Get multiplier from BRACKET_CONFIG since Firebase doesn't store it
-    const multiplier = BRACKET_CONFIG.rounds[roundIdx]?.multiplier || 1;
-    return seriesArray.map(s => ({ ...s, multiplier }));
+    // Get scoring from BRACKET_CONFIG since Firebase doesn't store it
+    const roundConfig = BRACKET_CONFIG.rounds[roundIdx];
+    const winnerPoints = roundConfig?.winnerPoints || 0;
+    const gamesPoints = roundConfig?.gamesPoints || 0;
+    return seriesArray.map(s => ({ ...s, winnerPoints, gamesPoints }));
   });
 }
 
@@ -25,9 +25,14 @@ export function calcPoints(picks, results) {
     if (!series.winner) return;
     const pick = picks[series.id];
     if (!pick?.winner) return;
+    
+    // Only award points if winner is correct
     if (pick.winner === series.winner) {
-      total += correctWinner * series.multiplier;
-      if (pick.games === series.games) total += exactGames * series.multiplier;
+      total += series.winnerPoints;
+      // Bonus for exact games ONLY if winner was correct
+      if (pick.games === series.games) {
+        total += series.gamesPoints;
+      }
     }
   });
   return total;
@@ -49,12 +54,12 @@ export function maxPossible(picks, results) {
       
       if (!resultSeries?.winner) {
         // Series not done yet — full points still possible
-        potential += (correctWinner + exactGames) * round.multiplier;
+        potential += round.winnerPoints + round.gamesPoints;
       } else if (pick.winner === resultSeries.winner) {
         // Won — count what was earned
-        potential += correctWinner * round.multiplier;
+        potential += round.winnerPoints;
         if (pick.games === resultSeries.games) {
-          potential += exactGames * round.multiplier;
+          potential += round.gamesPoints;
         }
       }
       // Wrong pick = 0 potential
