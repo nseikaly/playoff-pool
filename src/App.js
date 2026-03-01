@@ -275,61 +275,73 @@ const css = `
   .loader { text-align:center; padding:60px 20px; color:var(--text3); font-family:'Bebas Neue',sans-serif;
     font-size:1.2rem; letter-spacing:3px; animation:pulse 1.5s infinite; }
 
-  /* ─── Bracket Layout ─────────────────────────────────────────────────────── */
-  .bracket-scroll { overflow-x:auto; margin:0 -16px; padding:0 16px 12px; }
-  .bracket-scroll::-webkit-scrollbar { height:6px; }
-  .bracket-scroll::-webkit-scrollbar-track { background:var(--surface); }
-  .bracket-scroll::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+  /* ─── Vertical Bracket Layout ────────────────────────────────────────────── */
+  /* The bracket is a horizontal grid per conference block.
+     Each conference = [R1 col] [connector] [R2 col] [connector] [CF col] [connector] [Finals col]
+     Conferences stack vertically with a gap between them. */
 
-  .bracket { display:grid; min-width:1260px;
-    grid-template-columns:minmax(148px,1fr) 24px minmax(148px,1fr) 24px minmax(148px,1fr) minmax(160px,1.1fr) minmax(148px,1fr) 24px minmax(148px,1fr) 24px minmax(148px,1fr);
-    grid-template-rows:auto repeat(8,1fr); gap:0; align-items:stretch; padding:8px 0; }
+  .bracket-outer { display:flex; flex-direction:column; gap:40px; padding:8px 0 20px; overflow-x:auto; }
+  .bracket-outer::-webkit-scrollbar { height:6px; }
+  .bracket-outer::-webkit-scrollbar-track { background:var(--surface); }
+  .bracket-outer::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
 
-  /* Round headers row */
-  .brk-hdr { grid-row:1; display:flex; align-items:flex-end; justify-content:center; padding:0 0 10px;
-    font-family:'Bebas Neue',sans-serif; font-size:0.72rem; letter-spacing:2.5px; color:var(--text3);
-    text-transform:uppercase; text-align:center; white-space:nowrap; }
+  /* Conference section label */
+  .brk-conf-label { font-family:'Bebas Neue',sans-serif; font-size:0.85rem; letter-spacing:3px;
+    color:var(--text2); text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+  .brk-conf-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  /* One conference bracket row: columns for rounds + connectors */
+  .brk-conf { display:grid; min-width:860px;
+    grid-template-columns: 220px 36px 220px 36px 220px 36px 220px;
+    align-items:stretch; gap:0; }
+
+  /* Round header above each column */
+  .brk-round-hdr { font-family:'Bebas Neue',sans-serif; font-size:0.65rem; letter-spacing:2.5px;
+    color:var(--text3); text-transform:uppercase; text-align:center; padding:0 0 8px;
+    white-space:nowrap; }
   .brk-hdr-pts { display:block; font-family:'JetBrains Mono',monospace; font-size:0.58rem; letter-spacing:1px;
     color:var(--gold); margin-top:2px; font-weight:400; }
 
-  /* Matchup cell positioning */
-  .brk-cell { display:flex; align-items:center; padding:4px 0; }
-  .brk-cell.east-flow { justify-content:flex-end; }
-  .brk-cell.west-flow { justify-content:flex-start; }
-  .brk-cell.center-flow { justify-content:center; }
+  /* Round column: stacks matchup cells vertically */
+  .brk-round-col { display:flex; flex-direction:column; gap:0; }
 
-  /* Connector columns */
-  .brk-conn { position:relative; }
-  .brk-conn-line { position:absolute; border-color:var(--border2); border-style:solid; border-width:0; }
+  /* Each matchup slot — flex child in the round column */
+  .brk-slot { display:flex; align-items:center; justify-content:flex-start; }
 
-  /* East connectors: right side bracket shape ─┐ then ├─ */
-  .brk-conn.east .brk-conn-top { top:25%; bottom:50%; right:0; left:50%; border-right-width:1px; border-top-width:1px; }
-  .brk-conn.east .brk-conn-bot { top:50%; bottom:25%; right:0; left:50%; border-right-width:1px; border-bottom-width:1px; }
-  .brk-conn.east .brk-conn-out { top:calc(50% - 0.5px); height:1px; left:0; right:50%; background:var(--border2); }
+  /* Connector column between rounds */
+  .brk-conn-col { position:relative; display:flex; flex-direction:column; }
 
-  /* West connectors: mirrored ┌─ then ─┤ */
-  .brk-conn.west .brk-conn-top { top:25%; bottom:50%; left:0; right:50%; border-left-width:1px; border-top-width:1px; }
-  .brk-conn.west .brk-conn-bot { top:50%; bottom:25%; left:0; right:50%; border-left-width:1px; border-bottom-width:1px; }
-  .brk-conn.west .brk-conn-out { top:calc(50% - 0.5px); height:1px; right:0; left:50%; background:var(--border2); }
+  /* Each connector cell spans the combined height of two source slots */
+  .brk-conn-cell { position:relative; flex:1; }
+
+  /* The actual connector lines inside a cell */
+  .brk-conn-cell::before,
+  .brk-conn-cell::after { content:''; position:absolute; border-color:var(--border2); border-style:solid; border-width:0; }
+  /* Top arm: from center of top source card down to mid-point */
+  .brk-conn-cell::before { left:0; right:50%; top:25%; bottom:50%; border-left-width:1px; border-top-width:1px; }
+  /* Bottom arm: from mid-point up to center of bottom source card */
+  .brk-conn-cell::after  { left:0; right:50%; top:50%; bottom:25%; border-left-width:1px; border-bottom-width:1px; }
+  /* Horizontal out-line from midpoint to next column */
+  .brk-conn-cell .brk-conn-out { position:absolute; top:calc(50% - 0.5px); height:1px;
+    left:50%; right:0; background:var(--border2); }
+
 
   /* ─── Bracket Matchup Card ───────────────────────────────────────────────── */
-  .bm { width:152px; background:var(--surface2); border:1px solid var(--border); border-radius:6px;
+  .bm { width:220px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
     overflow:hidden; transition:border-color 0.2s; flex-shrink:0; }
   .bm:hover { border-color:var(--border2); }
   .bm.done { border-left:2px solid var(--green); }
-  .bm.finals-card { width:164px; border-color:var(--gold); background:rgba(201,168,76,0.04); }
-  .bm.finals-card .bm-hdr { background:rgba(201,168,76,0.08); }
 
-  .bm-hdr { display:flex; align-items:center; justify-content:space-between; padding:3px 7px;
+  .bm-hdr { display:flex; align-items:center; justify-content:space-between; padding:5px 10px;
     background:var(--surface3); border-bottom:1px solid var(--border); }
-  .bm-conf { font-size:0.5rem; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; }
+  .bm-conf { font-size:0.55rem; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; }
   .bm-conf.East { color:#7b9ff5; }
   .bm-conf.West { color:#fb923c; }
   .bm-conf.Finals { color:var(--gold2); }
-  .bm-result { font-size:0.5rem; font-family:'JetBrains Mono',monospace; color:var(--green); letter-spacing:0.3px; }
+  .bm-result { font-size:0.55rem; font-family:'JetBrains Mono',monospace; color:var(--green); letter-spacing:0.3px; }
 
   /* Team button rows */
-  .bm-team { display:flex; align-items:center; gap:5px; padding:5px 7px; cursor:pointer;
+  .bm-team { display:flex; align-items:center; gap:8px; padding:9px 10px; cursor:pointer;
     border:none; background:none; width:100%; text-align:left; color:var(--text2);
     transition:all 0.15s; border-bottom:1px solid var(--border); position:relative; }
   .bm-team:last-of-type { border-bottom:none; }
@@ -342,39 +354,33 @@ const css = `
   .bm-team.sel .bm-logo { filter:drop-shadow(0 0 5px rgba(240,198,90,0.5)); }
   .bm-team.ok  .bm-logo { filter:drop-shadow(0 0 5px rgba(34,197,94,0.4)); }
   .bm-logo { flex-shrink:0; transition:filter 0.15s, opacity 0.15s; }
-  .bm-name { font-size:0.62rem; font-weight:600; line-height:1.2; flex:1; min-width:0;
+  .bm-name { font-size:0.75rem; font-weight:600; line-height:1.2; flex:1; min-width:0;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .bm-seed { font-size:0.52rem; font-family:'JetBrains Mono',monospace; font-weight:800;
+  .bm-seed { font-size:0.58rem; font-family:'JetBrains Mono',monospace; font-weight:800;
     color:var(--text3); opacity:0.7; flex-shrink:0; }
   .bm-team.sel .bm-seed { color:var(--gold2); opacity:1; }
   .bm-team.ok  .bm-seed { color:var(--green); opacity:1; }
   .bm-team.wrong .bm-seed { opacity:0.25; }
 
   /* Games row */
-  .bm-games { display:flex; align-items:center; gap:2px; padding:4px 7px; background:var(--surface3); }
-  .bm-gl { font-size:0.52rem; color:var(--text3); letter-spacing:0.8px; margin-right:2px; }
-  .bm-gbtn { width:24px; height:19px; background:var(--surface2); border:1px solid var(--border2); border-radius:2px;
-    color:var(--text2); font-size:0.62rem; cursor:pointer; transition:all 0.12s;
+  .bm-games { display:flex; align-items:center; gap:3px; padding:6px 10px; background:var(--surface3); }
+  .bm-gl { font-size:0.56rem; color:var(--text3); letter-spacing:0.8px; margin-right:3px; }
+  .bm-gbtn { width:30px; height:24px; background:var(--surface2); border:1px solid var(--border2); border-radius:3px;
+    color:var(--text2); font-size:0.7rem; cursor:pointer; transition:all 0.12s;
     font-family:'JetBrains Mono',monospace; padding:0; }
   .bm-gbtn:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
   .bm-gbtn:disabled { cursor:default; }
   .bm-gbtn.sel { background:rgba(201,168,76,0.12); border-color:var(--gold); color:var(--gold2); font-weight:600; }
   .bm-gbtn.exact { background:rgba(34,197,94,0.15); border-color:var(--green); color:var(--green); }
-  .bm-ps { font-size:0.48rem; margin-left:auto; font-family:'JetBrains Mono',monospace; }
+  .bm-ps { font-size:0.52rem; margin-left:auto; font-family:'JetBrains Mono',monospace; }
   .bm-ps.ok { color:var(--cyan); }
   .bm-ps.pending { color:var(--text3); }
 
   /* Finals label */
-  .brk-finals-label { grid-column:6; grid-row:1; display:flex; flex-direction:column; align-items:center;
-    justify-content:flex-end; padding-bottom:10px; }
+  .brk-finals-label { display:flex; flex-direction:column; align-items:center;
+    justify-content:center; padding-bottom:10px; }
   .brk-finals-icon { font-size:1.1rem; line-height:1; margin-bottom:2px; }
 
-  @media(max-width:1340px) {
-    .bracket { min-width:1100px; }
-    .bm { width:136px; }
-    .bm.finals-card { width:148px; }
-    .bm-name { font-size:0.58rem; }
-  }
 `;
 
 // ─── Bracket Resolution ───────────────────────────────────────────────────────
@@ -560,8 +566,7 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
 
   const hasPick = pick.winner && pick.games;
 
-  return (
-    <div className={`bm ${settled ? "done" : ""} ${isFinals ? "finals-card" : ""}`}>
+
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
         {settled && <span className="bm-result">✓ in {result.games}</span>}
@@ -587,66 +592,104 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   );
 }
 
-// ─── Bracket View (full bracket layout) ──────────────────────────────────
+// ─── Bracket View (vertical layout) ──────────────────────────────────────────
+//
+// Layout per conference:
+//   [R1: 4 cards] → connector → [R2: 2 cards] → connector → [CF: 1 card] → connector → [Finals: 1 card]
+//
+// The Finals column is shared between East and West, shown once between them.
+// Connectors span the combined height of two source cards, with a centered bracket line.
 
-// Series placement map: { seriesId: { col, rowStart, rowEnd } }
-// Grid: 11 columns (5 round cols + 4 connector cols + overlap for finals center)
-// Actually: col 1=East R1, 2=conn, 3=East R2, 4=conn, 5=East CF, 6=Finals, 7=West CF, 8=conn, 9=West R2, 10=conn, 11=West R1
-// Rows: header=1, then 8 data rows (2-9)
-const BRACKET_PLACEMENT = {
-  // East R1 (col 1)
-  s1:  { col:1,  rs:2, re:3 },
-  s4:  { col:1,  rs:4, re:5 },
-  s2:  { col:1,  rs:6, re:7 },
-  s3:  { col:1,  rs:8, re:9 },
-  // East R2 (col 3)
-  s9:  { col:3,  rs:3, re:4 },
-  s10: { col:3,  rs:7, re:8 },
-  // East CF (col 5)
-  s13: { col:5,  rs:5, re:6 },
-  // Finals (col 6)
-  s15: { col:6,  rs:5, re:6 },
-  // West CF (col 7)
-  s14: { col:7,  rs:5, re:6 },
-  // West R2 (col 9)
-  s11: { col:9,  rs:3, re:4 },
-  s12: { col:9,  rs:7, re:8 },
-  // West R1 (col 11)
-  s5:  { col:11, rs:2, re:3 },
-  s8:  { col:11, rs:4, re:5 },
-  s6:  { col:11, rs:6, re:7 },
-  s7:  { col:11, rs:8, re:9 },
-};
+// Describes which two R1 series feed each R2 series, etc.
+// Already defined above as FEEDS_FROM.
 
-// Connector definitions: { col, rowStart, rowEnd, side }
-const BRACKET_CONNECTORS = [
-  // East R1→R2 connectors
-  { col:2, rs:2, re:5, side:"east" },  // s1+s4 → s9
-  { col:2, rs:6, re:9, side:"east" },  // s2+s3 → s10
-  // East R2→CF connectors
-  { col:4, rs:3, re:8, side:"east" },  // s9+s10 → s13
-  // West R1→R2 connectors
-  { col:10, rs:2, re:5, side:"west" }, // s5+s8 → s11
-  { col:10, rs:6, re:9, side:"west" }, // s6+s7 → s12
-  // West R2→CF connectors
-  { col:8, rs:3, re:8, side:"west" },  // s11+s12 → s14
-];
+// Card height constants (px) — used to calculate connector heights
+const CARD_H = 122; // approximate rendered card height including games row
+const CARD_GAP = 16; // gap between cards in same round column
 
-// Round info for headers
-const ROUND_HEADERS = [
-  { col:1,  label:"First Round",     pts:"10+5" },
-  { col:3,  label:"Semis",           pts:"20+5" },
-  { col:5,  label:"Conf Finals",     pts:"30+10" },
-  { col:6,  label:"NBA Finals",      pts:"40+10", isFinals:true },
-  { col:7,  label:"Conf Finals",     pts:"30+10" },
-  { col:9,  label:"Semis",           pts:"20+5" },
-  { col:11, label:"First Round",     pts:"10+5" },
-];
+function BracketConnector({ numSourceCards }) {
+  // Spans the height of numSourceCards source cards + gaps between them
+  // Draws a bracket: vertical bar on left, two horizontal arms to the midpoints of each source pair,
+  // and a horizontal line out to the right at the midpoint.
+  return (
+    <div style={{
+      position:'relative',
+      width:'100%',
+      height:'100%',
+      minHeight: numSourceCards * CARD_H + (numSourceCards - 1) * CARD_GAP,
+    }}>
+      {/* Top arm */}
+      <div style={{
+        position:'absolute', left:0, right:'50%',
+        top:'25%', bottom:'50%',
+        borderLeft:'1px solid var(--border2)',
+        borderTop:'1px solid var(--border2)',
+      }}/>
+      {/* Bottom arm */}
+      <div style={{
+        position:'absolute', left:0, right:'50%',
+        top:'50%', bottom:'25%',
+        borderLeft:'1px solid var(--border2)',
+        borderBottom:'1px solid var(--border2)',
+      }}/>
+      {/* Horizontal out to the next column */}
+      <div style={{
+        position:'absolute',
+        top:'calc(50% - 0.5px)', height:1,
+        left:'50%', right:0,
+        background:'var(--border2)',
+      }}/>
+    </div>
+  );
+}
+
+// A single round column: array of series IDs, vertically stacked
+function BracketRoundCol({ seriesIds, seriesMap, roundMap, picks, onPick, readOnly, results }) {
+  return (
+    <div className="brk-round-col" style={{gap: CARD_GAP}}>
+      {seriesIds.map(sid => {
+        const series = seriesMap[sid];
+        if (!series) return <div key={sid} style={{height:CARD_H}} />;
+        const round = roundMap[sid];
+        // Merge results
+        const resultRound = results?.rounds?.find(r => r.id === round?.id);
+        const si = round?.series.findIndex(s => s.id === sid);
+        const rs = resultRound?.series?.[si];
+        const merged = { ...series, winner: rs?.winner, games: rs?.games };
+        return (
+          <div key={sid} className="brk-slot">
+            <BracketMatchup
+              series={merged} round={round} picks={picks || {}}
+              onPick={onPick} readOnly={readOnly} results={results}
+              isFinals={sid === "s15"}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Connector column: one connector cell per pair of source cards
+// Each cell height = 2 source cards + the gap between them
+function BracketConnectorCol({ pairCount }) {
+  const cellH = 2 * CARD_H + CARD_GAP;
+  // Between cells there's also a gap equal to CARD_GAP (between the bottom of pair 1 and top of pair 2)
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap: CARD_GAP, width:'100%'}}>
+      {Array.from({length: pairCount}).map((_, i) => (
+        <div key={i} style={{height: cellH, position:'relative', width:'100%'}}>
+          <BracketConnector numSourceCards={2} />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function BracketView({ picks, onPick, readOnly, results }) {
   const resolvedRounds = resolveBracket(picks || {});
 
-  // Build flat series lookup from resolved rounds
+  // Build flat series + round lookups
   const seriesMap = {};
   const roundMap = {};
   resolvedRounds.forEach(round => {
@@ -656,67 +699,113 @@ function BracketView({ picks, onPick, readOnly, results }) {
     });
   });
 
-  // Merge result data into series
-  const getMergedSeries = (sid) => {
-    const series = seriesMap[sid];
-    if (!series) return null;
-    const resultRound = results?.rounds?.find(r => r.id === roundMap[sid]?.id);
-    const si = roundMap[sid]?.series.findIndex(s => s.id === sid);
-    const rs = resultRound?.series?.[si] || series;
-    return { ...series, winner: rs.winner, games: rs.games };
-  };
+  // Conference structure:
+  // East: R1=[s1,s4,s2,s3] → R2=[s9,s10] → CF=[s13] → Finals=[s15]
+  // West: R1=[s5,s8,s6,s7] → R2=[s11,s12] → CF=[s14] → (Finals already shown)
+
+  const CONF_ROUNDS = [
+    {
+      conf: "East",
+      rounds: [
+        { label:"First Round", pts:"10+5", ids:["s1","s4","s2","s3"] },
+        { label:"Semis",       pts:"20+5", ids:["s9","s10"] },
+        { label:"Conf Finals", pts:"30+10",ids:["s13"] },
+      ]
+    },
+    {
+      conf: "West",
+      rounds: [
+        { label:"First Round", pts:"10+5", ids:["s5","s8","s6","s7"] },
+        { label:"Semis",       pts:"20+5", ids:["s11","s12"] },
+        { label:"Conf Finals", pts:"30+10",ids:["s14"] },
+      ]
+    },
+  ];
+
+  // Finals is shown between East and West as a shared column
+  const finalsRound = { label:"NBA Finals", pts:"40+10", ids:["s15"] };
+
+  // Each conference bracket + connector to finals
+  function renderConfBracket(confData) {
+    const { rounds } = confData;
+    const cols = [];
+
+    rounds.forEach((round, ri) => {
+      // Round header + cards column
+      cols.push(
+        <div key={`r${ri}`} style={{display:'flex', flexDirection:'column', width:220, flexShrink:0}}>
+          <div className="brk-round-hdr">
+            {round.label}
+            <span className="brk-hdr-pts" style={{display:'block'}}>{round.pts}pts</span>
+          </div>
+          <BracketRoundCol
+            seriesIds={round.ids}
+            seriesMap={seriesMap} roundMap={roundMap}
+            picks={picks} onPick={onPick} readOnly={readOnly} results={results}
+          />
+        </div>
+      );
+
+      // Connector after this round (except after last conf round — Finals has its own)
+      if (ri < rounds.length - 1) {
+        const pairCount = round.ids.length / 2;
+        cols.push(
+          <div key={`conn${ri}`} style={{display:'flex', flexDirection:'column', width:40, flexShrink:0}}>
+            <div className="brk-round-hdr" style={{visibility:'hidden'}}>·</div>
+            <BracketConnectorCol pairCount={pairCount} />
+          </div>
+        );
+      }
+    });
+
+    // Connector from CF → Finals (simple horizontal line centered on CF card)
+    cols.push(
+      <div key="conn-finals" style={{display:'flex', flexDirection:'column', width:40, flexShrink:0}}>
+        <div className="brk-round-hdr" style={{visibility:'hidden'}}>·</div>
+        <div style={{display:'flex', alignItems:'center', height: CARD_H}}>
+          <div style={{width:'100%', height:1, background:'var(--border2)'}} />
+        </div>
+      </div>
+    );
+
+    return cols;
+  }
 
   return (
-    <div className="bracket-scroll">
-      <div className="bracket" style={{gridTemplateColumns:'minmax(148px,1fr) 24px minmax(148px,1fr) 24px minmax(148px,1fr) minmax(160px,1.1fr) minmax(148px,1fr) 24px minmax(148px,1fr) 24px minmax(148px,1fr)', gridTemplateRows:'auto repeat(8,1fr)'}}>
-        {/* Round headers */}
-        {ROUND_HEADERS.map((h, i) => (
-          <div key={i} className="brk-hdr" style={{gridColumn:h.col, gridRow:1}}>
-            {h.isFinals ? (
-              <div style={{textAlign:'center'}}>
-                <div style={{fontSize:'1.1rem',lineHeight:1,marginBottom:2}}>🏆</div>
-                <div>{h.label}</div>
-                <span className="brk-hdr-pts">{h.pts}pts</span>
-              </div>
-            ) : (
-              <div style={{textAlign:'center'}}>
-                <div>{h.label}</div>
-                <span className="brk-hdr-pts">{h.pts}pts</span>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Connector column headers (empty) */}
-        {[2,4,8,10].map(c => (
-          <div key={`ch${c}`} style={{gridColumn:c, gridRow:1}} />
-        ))}
-
-        {/* Matchup cells */}
-        {Object.entries(BRACKET_PLACEMENT).map(([sid, pos]) => {
-          const merged = getMergedSeries(sid);
-          if (!merged) return null;
-          const round = roundMap[sid];
-          const flow = pos.col <= 5 ? "east-flow" : pos.col >= 7 ? "west-flow" : "center-flow";
-          return (
-            <div key={sid} className={`brk-cell ${flow}`} style={{gridColumn:pos.col, gridRow:`${pos.rs}/${pos.re}`}}>
-              <BracketMatchup
-                series={merged} round={round} picks={picks || {}}
-                onPick={onPick} readOnly={readOnly} results={results}
-                isFinals={sid === "s15"}
-              />
+    <div className="bracket-outer">
+      {/* East section */}
+      <div>
+        <div className="brk-conf-label">Eastern Conference</div>
+        <div style={{display:'flex', alignItems:'flex-start', gap:0}}>
+          {renderConfBracket(CONF_ROUNDS[0])}
+          {/* Finals column — shown once, vertically centered between East CF and West CF */}
+          <div style={{display:'flex', flexDirection:'column'}}>
+            <div className="brk-round-hdr">
+              🏆 {finalsRound.label}
+              <span className="brk-hdr-pts" style={{display:'block'}}>{finalsRound.pts}pts</span>
             </div>
-          );
-        })}
-
-        {/* Connector lines */}
-        {BRACKET_CONNECTORS.map((c, i) => (
-          <div key={`conn${i}`} className={`brk-conn ${c.side}`} style={{gridColumn:c.col, gridRow:`${c.rs}/${c.re}`, position:'relative'}}>
-            <div className="brk-conn-line brk-conn-top" />
-            <div className="brk-conn-line brk-conn-bot" />
-            <div className="brk-conn-line brk-conn-out" />
+            <BracketRoundCol
+              seriesIds={finalsRound.ids}
+              seriesMap={seriesMap} roundMap={roundMap}
+              picks={picks} onPick={onPick} readOnly={readOnly} results={results}
+            />
           </div>
-        ))}
+        </div>
+      </div>
+
+      {/* West section */}
+      <div>
+        <div className="brk-conf-label">Western Conference</div>
+        <div style={{display:'flex', alignItems:'flex-start', gap:0}}>
+          {renderConfBracket(CONF_ROUNDS[1])}
+          {/* Empty Finals placeholder to keep alignment consistent */}
+          <div style={{display:'flex', flexDirection:'column'}}>
+            <div className="brk-round-hdr" style={{visibility:'hidden'}}>🏆 NBA Finals</div>
+            <div style={{width:220, height:CARD_H, display:'flex', alignItems:'center', justifyContent:'center'}}>
+              <span style={{fontSize:'0.65rem', color:'var(--text3)', fontFamily:"'JetBrains Mono',monospace", letterSpacing:'1px'}}>← already picked above</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -799,6 +888,7 @@ export default function App() {
   // ── Submit ──
   const handleSubmit = async () => {
     if (!myName.trim()) return showToast("Please enter your name first");
+    if (!myEmail.trim()) return showToast("Please enter your email address");
     if (!allPicked)     return showToast(`Complete all ${totalSeries} picks first`);
     setSaving(true);
     try {
@@ -954,12 +1044,12 @@ export default function App() {
                   <input className="fi" placeholder="e.g. Mike Jordan" value={myName} onChange={e => setMyName(e.target.value)} disabled={submitted || picksLocked} />
                 </div>
                 <div>
-                  <label className="fl">Email (optional)</label>
-                  <input className="fi" type="email" placeholder="for updates" value={myEmail} onChange={e => setMyEmail(e.target.value)} disabled={picksLocked} />
+                  <label className="fl">Email *</label>
+                  <input className="fi" type="email" placeholder="your@email.com" value={myEmail} onChange={e => setMyEmail(e.target.value)} disabled={picksLocked} />
                 </div>
               </div>
               <div className="row gap8 wrap">
-                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || saving || picksLocked}>
+                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !myEmail.trim() || saving || picksLocked}>
                   {saving ? "Saving…" : submitted ? "Update Picks" : "Submit Picks"}
                 </button>
                 {picksLocked
