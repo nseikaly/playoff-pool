@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { ref, onValue, set, update } from "firebase/database";
 import { db } from "./firebase";
 import { BRACKET_CONFIG, GAME_OPTIONS, MAX_POINTS } from "./bracketConfig";
-import { buildLeaderboard, calcPoints, maxPossible } from "./scoring";
+import { buildLeaderboard, calcPoints, maxPossible, getEliminatedTeams } from "./scoring";
 import { TeamLogo } from "./teamLogos";
 
 // ─── Seed lookup (team name → playoff seed) built from R1 config ─────────────
@@ -137,23 +137,25 @@ const css = `
 
   /* Leaderboard */
   .lb { display:grid; gap:8px; }
-  .lbr { display:grid; grid-template-columns:38px 1fr auto auto; gap:12px; align-items:center;
+  .lbr { display:grid; grid-template-columns:36px 1fr auto auto auto auto; gap:10px; align-items:center;
     background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px 16px; transition:border-color 0.2s; }
   .lbr:hover { border-color:var(--border2); }
-  .lbr.r1 { border-color:rgba(201,168,76,0.4); background:rgba(201,168,76,0.05); }
   .lbr.r2 { border-color:rgba(148,163,184,0.25); }
   .lbr.r3 { border-color:rgba(205,127,50,0.25); }
-  .lbr.me { border-color:rgba(45,212,191,0.35) !important; }
+  .lbr.me { border-color:rgba(201,168,76,0.6) !important; background:rgba(201,168,76,0.05); }
   .rank { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; color:var(--text3); }
-  .r1 .rank { color:var(--gold2); }
+  .me .rank { color:var(--gold2); }
   .r2 .rank { color:#94a3b8; }
   .r3 .rank { color:#cd7f32; }
   .lbn { font-weight:600; font-size:0.88rem; }
-  .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; width:100%; }
+  .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; max-width:140px; }
   .pbf { height:100%; background:linear-gradient(90deg,var(--gold),var(--amber)); border-radius:2px; transition:width 0.6s; }
   .pts { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; color:var(--gold); line-height:1; }
   .ptsl { font-size:0.6rem; color:var(--text3); letter-spacing:1px; }
   .lbmeta { font-size:0.7rem; color:var(--text3); text-align:right; line-height:1.7; }
+  .lb-stat { text-align:center; padding:0 6px; }
+  .lb-stat-val { font-family:'Bebas Neue',sans-serif; font-size:1.75rem; line-height:1; }
+  .lb-stat-lbl { font-size:0.52rem; color:var(--text3); letter-spacing:1.5px; text-transform:uppercase; margin-top:2px; white-space:nowrap; }
   .lbr-finals { display:flex; flex-direction:column; align-items:center; gap:3px; padding:0 4px; }
   .lbr-finals-lbl { font-size:0.52rem; letter-spacing:1.5px; color:var(--text3); text-transform:uppercase;
     font-family:'JetBrains Mono',monospace; white-space:nowrap; }
@@ -301,11 +303,11 @@ const css = `
     align-items:stretch; gap:0; }
 
   /* Round header above each column */
-  .brk-round-hdr { font-family:'Bebas Neue',sans-serif; font-size:0.65rem; letter-spacing:2.5px;
-    color:var(--text3); text-transform:uppercase; text-align:center; padding:0 0 8px;
+  .brk-round-hdr { font-family:'Bebas Neue',sans-serif; font-size:0.85rem; letter-spacing:2.5px;
+    color:var(--text); text-transform:uppercase; text-align:center; padding:0 0 8px;
     white-space:nowrap; }
-  .brk-hdr-pts { display:block; font-family:'JetBrains Mono',monospace; font-size:0.58rem; letter-spacing:1px;
-    color:var(--gold); margin-top:2px; font-weight:400; }
+  .brk-hdr-pts { display:block; font-family:'JetBrains Mono',monospace; font-size:0.68rem; letter-spacing:1px;
+    color:var(--gold2); margin-top:2px; font-weight:600; }
 
   /* Round column: stacks matchup cells vertically */
   .brk-round-col { display:flex; flex-direction:column; gap:0; }
@@ -343,7 +345,7 @@ const css = `
   .bm-conf.East { color:#7b9ff5; }
   .bm-conf.West { color:#fb923c; }
   .bm-conf.Finals { color:var(--gold2); }
-  .bm-result { font-size:0.55rem; font-family:'JetBrains Mono',monospace; color:var(--green); letter-spacing:0.3px; }
+  .bm-result { font-size:0.55rem; font-family:'JetBrains Mono',monospace; letter-spacing:0.3px; }
 
   /* Team button rows */
   .bm-team { display:flex; align-items:center; gap:8px; padding:9px 10px; cursor:pointer;
@@ -379,7 +381,7 @@ const css = `
   .bm-gbtn.exact      { background:rgba(34,197,94,0.15); border-color:var(--green); color:var(--green); }
   .bm-gbtn.wrong-games{ background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.55); color:rgba(239,68,68,0.8); font-weight:600; }
   .bm-ps { font-size:0.52rem; margin-left:auto; font-family:'JetBrains Mono',monospace; }
-  .bm-ps.ok { color:var(--cyan); }
+  .bm-ps.ok { color:var(--gold2); }
   .bm-ps.pending { color:var(--text3); }
 
   /* Finals label */
@@ -555,7 +557,7 @@ function shortTeamName(fullName) {
 
 // ─── Bracket Matchup (compact card for bracket view) ─────────────────────
 
-function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals }) {
+function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams }) {
   const pick   = picks?.[series.id] || {};
   const result = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
@@ -581,17 +583,21 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   const teamClass = (team) => {
     if (pick.winner !== team) return "";
     if (settled) return pick.winner === result.winner ? "ok" : "wrong";
+    // Not settled — show red if team is already eliminated
+    if (eliminatedTeams?.has(team)) return "wrong";
     return "sel";
   };
 
   const gamesClass = (g) => {
     if (pick.games !== g) return "";
-    if (!settled) return "sel";
+    if (!settled) {
+      // Games pick dead if the winner pick is already eliminated
+      if (eliminatedTeams?.has(pick.winner)) return "wrong-games";
+      return "sel";
+    }
     // Winner correct + exact games = green
     if (pick.winner === result.winner && pick.games === result.games) return "exact";
-    // Winner correct but games wrong = still gold (partial credit style)
-    if (pick.winner === result.winner) return "sel";
-    // Winner wrong = red games button
+    // All other settled cases (wrong winner, or correct winner but wrong games) = red
     return "wrong-games";
   };
 
@@ -602,7 +608,7 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
     <div className={`bm ${settled ? "done" : ""}`}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
-        {settled && <span className="bm-result">✓ {resultName} in {result.games}</span>}
+        {settled && <span className="bm-result" style={{color: series.conference === 'East' ? '#7b9ff5' : series.conference === 'West' ? '#fb923c' : 'var(--gold2)'}}>✓ {resultName} in {result.games}</span>}
       </div>
       <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
         <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
@@ -709,6 +715,9 @@ function BracketView({ picks, onPick, readOnly, results }) {
     roundMap[s.id]  = round;
   }));
 
+  // ── Eliminated teams (computed once for this bracket render) ─────────────
+  const eliminatedTeams = getEliminatedTeams(results);
+
   // ── Card renderer ─────────────────────────────────────────────────────────
   function renderCard(sid, topPx, col) {
     const series = seriesMap[sid];
@@ -724,6 +733,7 @@ function BracketView({ picks, onPick, readOnly, results }) {
           series={merged} round={round} picks={picks || {}}
           onPick={onPick} readOnly={readOnly} results={results}
           isFinals={sid === "s15"}
+          eliminatedTeams={eliminatedTeams}
         />
       </div>
     );
@@ -877,6 +887,13 @@ export default function App() {
 
   // ── Firebase listeners ──
   useEffect(() => {
+    // If Firebase is not configured (e.g. local dev without .env), use defaults immediately
+    if (!db) {
+      setResults(BRACKET_CONFIG);
+      setLoading(false);
+      return;
+    }
+
     // Fallback: if Firebase doesn't respond within 3s, load with defaults
     const fallback = setTimeout(() => {
       setResults(prev => prev || BRACKET_CONFIG);
@@ -1034,7 +1051,7 @@ export default function App() {
         <div className="hdr">
           <div>
             <div className="hdr-title">{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</div>
-            <div className="hdr-sub">2026 NBA Playoffs · Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
+            <div className="hdr-sub">2026 NBA Playoffs · Built & Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
           </div>
           <div className="row gap8">
             <span className="live-dot" />
@@ -1136,7 +1153,7 @@ export default function App() {
               <div className="lb">
                 {leaderboard.map((p, i) => {
                   const isMe = sanitize(p.name || "") === myKey;
-                  const rankClass = isMe ? "me" : i === 0 ? "r1" : i === 1 ? "r2" : i === 2 ? "r3" : "";
+                  const rankClass = isMe ? "me" : i === 1 ? "r2" : i === 2 ? "r3" : "";
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
                   // Shorten long team names to just the nickname (last word)
@@ -1146,26 +1163,34 @@ export default function App() {
                     <div
                       key={p.id}
                       className={`lbr ${rankClass} ${canView ? "clickable" : ""}`}
-                      style={picksLocked ? {gridTemplateColumns:'38px 1fr auto auto auto'} : {}}
+                      style={{gridTemplateColumns: picksLocked ? '36px 1fr auto auto auto auto auto' : '36px 1fr auto auto auto auto'}}
                       onClick={canView ? () => setViewingEntry(p) : undefined}
                     >
                       <div className="rank">{i + 1}</div>
                       <div>
                         <div className="lbn">
-                          {p.name} {isMe && <span className="xs cyan">(you)</span>}
+                          {p.name} {isMe && <span className="xs" style={{color:'var(--gold)'}}>( you )</span>}
                         </div>
                         <div className="pb">
                           <div className="pbf" style={{width:`${topPts ? (p.points/topPts)*100 : 0}%`}} />
                         </div>
                         {canView && <div className="lbr-view">tap to view picks →</div>}
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div className="pts">{p.points}</div>
-                        <div className="ptsl">PTS</div>
+                      <div className="lb-stat">
+                        <div className="lb-stat-val" style={{color:'var(--gold)'}}>{p.points}</div>
+                        <div className="lb-stat-lbl">PTS</div>
                       </div>
-                      <div className="lbmeta">
-                        <div>Max: <span className="mono cyan">{p.maxPts}</span></div>
-                        <div>Correct: <span className="mono green">{p.correct}</span></div>
+                      <div className="lb-stat">
+                        <div className="lb-stat-val" style={{color:'var(--cyan)', fontSize:'1.4rem'}}>{p.maxPts}</div>
+                        <div className="lb-stat-lbl">MAX PTS</div>
+                      </div>
+                      <div className="lb-stat">
+                        <div className="lb-stat-val" style={{color:'var(--green)', fontSize:'1.4rem'}}>{p.correct}</div>
+                        <div className="lb-stat-lbl">SERIES ✓</div>
+                      </div>
+                      <div className="lb-stat">
+                        <div className="lb-stat-val" style={{color:'var(--amber)', fontSize:'1.4rem'}}>{p.correctGames}</div>
+                        <div className="lb-stat-lbl">GAMES ✓</div>
                       </div>
                       {picksLocked && (
                         <div className="lbr-finals">
