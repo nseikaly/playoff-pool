@@ -154,6 +154,11 @@ const css = `
   .pts { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; color:var(--gold); line-height:1; }
   .ptsl { font-size:0.6rem; color:var(--text3); letter-spacing:1px; }
   .lbmeta { font-size:0.7rem; color:var(--text3); text-align:right; line-height:1.7; }
+  .lbr-finals { display:flex; flex-direction:column; align-items:center; gap:3px; padding:0 4px; }
+  .lbr-finals-lbl { font-size:0.52rem; letter-spacing:1.5px; color:var(--text3); text-transform:uppercase;
+    font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+  .lbr-finals-team { font-size:0.7rem; font-weight:700; color:var(--gold2); text-align:center;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
   /* Stats */
   .sg { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin-bottom:22px; }
@@ -327,7 +332,7 @@ const css = `
 
 
   /* ─── Bracket Matchup Card ───────────────────────────────────────────────── */
-  .bm { width:220px; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  .bm { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
     overflow:hidden; transition:border-color 0.2s; flex-shrink:0; }
   .bm:hover { border-color:var(--border2); }
   .bm.done { border-left:2px solid var(--green); }
@@ -1118,10 +1123,18 @@ export default function App() {
                   const isMe = sanitize(p.name || "") === myKey;
                   const rankClass = isMe ? "me" : i === 0 ? "r1" : i === 1 ? "r2" : i === 2 ? "r3" : "";
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
+                  const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
+                  // Shorten long team names for display (e.g. "Boston Celtics" → "Celtics")
+                  const shortName = (name) => {
+                    if (!name) return "—";
+                    const parts = name.split(" ");
+                    return parts.length >= 2 ? parts.slice(1).join(" ") : name;
+                  };
                   return (
                     <div
                       key={p.id}
                       className={`lbr ${rankClass} ${canView ? "clickable" : ""}`}
+                      style={picksLocked ? {gridTemplateColumns:'38px 1fr auto auto auto'} : {}}
                       onClick={canView ? () => setViewingEntry(p) : undefined}
                     >
                       <div className="rank">{i + 1}</div>
@@ -1142,6 +1155,18 @@ export default function App() {
                         <div>Max: <span className="mono cyan">{p.maxPts}</span></div>
                         <div>Correct: <span className="mono green">{p.correct}</span></div>
                       </div>
+                      {picksLocked && (
+                        <div className="lbr-finals">
+                          <div className="lbr-finals-lbl">🏆 Finals Pick</div>
+                          {finalsWinner
+                            ? <>
+                                <TeamLogo name={finalsWinner} size={28} state="" />
+                                <div className="lbr-finals-team">{shortName(finalsWinner)}</div>
+                              </>
+                            : <div className="lbr-finals-team" style={{color:'var(--text3)'}}>—</div>
+                          }
+                        </div>
+                      )}
                     </div>
                   );
                 })}
