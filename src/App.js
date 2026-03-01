@@ -140,13 +140,9 @@ const css = `
   .lbr { display:grid; grid-template-columns:36px 1fr auto auto auto auto; gap:10px; align-items:center;
     background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px 16px; transition:border-color 0.2s; }
   .lbr:hover { border-color:var(--border2); }
-  .lbr.r2 { border-color:rgba(148,163,184,0.25); }
-  .lbr.r3 { border-color:rgba(205,127,50,0.25); }
   .lbr.me { border-color:rgba(148,163,184,0.7) !important; background:rgba(148,163,184,0.06); }
   .rank { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; color:var(--text3); }
   .me .rank { color:#b4c4d4; }
-  .r2 .rank { color:#94a3b8; }
-  .r3 .rank { color:#cd7f32; }
   .lbn { font-weight:600; font-size:0.88rem; }
   .lbn-you { font-size:0.68rem; color:#94a3b8; font-weight:500; letter-spacing:0.3px; margin-left:5px; }
   .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; max-width:140px; }
@@ -367,6 +363,14 @@ const css = `
   .bm-team.ok    { background:rgba(34,197,94,0.1); color:var(--green); }
   .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); text-decoration:line-through; }
   .bm-team.wrong .bm-logo { opacity:0.5; filter:grayscale(0.35) saturate(0.6); }
+  /* Loser that you did NOT pick — fade out with strikethrough, not red */
+  .bm-team.loser-not-picked { background:transparent; color:rgba(255,255,255,0.2); text-decoration:line-through; }
+  .bm-team.loser-not-picked .bm-logo { opacity:0.18; filter:grayscale(1); }
+  .bm-team.loser-not-picked .bm-seed { opacity:0.15; }
+  /* Actual winner that you did NOT pick (you got the series wrong) — teal highlight */
+  .bm-team.winner-missed { background:rgba(45,212,191,0.07); color:rgba(45,212,191,0.65); }
+  .bm-team.winner-missed .bm-logo { opacity:0.65; filter:drop-shadow(0 0 4px rgba(45,212,191,0.25)); }
+  .bm-team.winner-missed .bm-seed { color:rgba(45,212,191,0.5); opacity:1; }
   .bm-team.sel .bm-logo { filter:drop-shadow(0 0 5px rgba(240,198,90,0.5)); }
   .bm-team.ok  .bm-logo { filter:drop-shadow(0 0 5px rgba(34,197,94,0.4)); }
   .bm-logo { flex-shrink:0; transition:filter 0.15s, opacity 0.15s; }
@@ -623,12 +627,16 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   };
 
   const teamClass = (team) => {
-    // Eliminated teams ALWAYS show wrong (red + strikethrough), regardless of settled state
-    if (eliminatedTeams?.has(team)) return "wrong";
     if (settled) {
-      if (pick.winner !== team) return "";
-      return pick.winner === result.winner ? "ok" : "wrong";
+      const teamWon    = team === result.winner;
+      const teamPicked = pick.winner === team;
+      if ( teamWon &&  teamPicked) return "ok";             // ✓ correct pick → green
+      if ( teamWon && !teamPicked) return "winner-missed";  // won, but you didn't pick them → teal
+      if (!teamWon &&  teamPicked) return "wrong";          // your pick lost → red strikethrough
+      return "loser-not-picked";                            // lost, not your pick → white fade strikethrough
     }
+    // Unsettled: eliminated teams in future rounds shown red
+    if (eliminatedTeams?.has(team)) return "wrong";
     if (pick.winner === team) return "sel";
     return "";
   };
@@ -640,10 +648,12 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
       if (eliminatedTeams?.has(pick.winner)) return "wrong-games";
       return "sel";
     }
-    // Winner correct + exact games = green
-    if (pick.winner === result.winner && pick.games === result.games) return "exact";
-    // All other settled cases (wrong winner, or correct winner but wrong games) = red
-    return "wrong-games";
+    // Wrong winner → red games (total miss)
+    if (pick.winner !== result.winner) return "wrong-games";
+    // Correct winner + exact games → green
+    if (pick.games === result.games) return "exact";
+    // Correct winner + wrong games → gold (got the series right, missed the count)
+    return "sel";
   };
 
   const hasPick = pick.winner && pick.games;
@@ -1358,7 +1368,7 @@ export default function App() {
               <div className="lb">
                 {leaderboard.map((p, i) => {
                   const isMe = sanitize(p.name || "") === myKey;
-                  const rankClass = isMe ? "me" : i === 1 ? "r2" : i === 2 ? "r3" : "";
+                  const rankClass = isMe ? "me" : "";
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
                   // Shorten long team names to just the nickname (last word)
