@@ -142,14 +142,16 @@ const css = `
   .lbr:hover { border-color:var(--border2); }
   .lbr.r2 { border-color:rgba(148,163,184,0.25); }
   .lbr.r3 { border-color:rgba(205,127,50,0.25); }
-  .lbr.me { border-color:rgba(201,168,76,0.6) !important; background:rgba(201,168,76,0.05); }
+  .lbr.me { border-color:rgba(148,163,184,0.7) !important; background:rgba(148,163,184,0.06); }
   .rank { font-family:'Bebas Neue',sans-serif; font-size:1.35rem; color:var(--text3); }
-  .me .rank { color:var(--gold2); }
+  .me .rank { color:#b4c4d4; }
   .r2 .rank { color:#94a3b8; }
   .r3 .rank { color:#cd7f32; }
   .lbn { font-weight:600; font-size:0.88rem; }
+  .lbn-you { font-size:0.68rem; color:#94a3b8; font-weight:500; letter-spacing:0.3px; margin-left:5px; }
   .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; max-width:140px; }
   .pbf { height:100%; background:linear-gradient(90deg,var(--gold),var(--amber)); border-radius:2px; transition:width 0.6s; }
+  .lbr.me .pbf { background:linear-gradient(90deg,#8fa8bc,#b4c4d4); }
   .pts { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; color:var(--gold); line-height:1; }
   .ptsl { font-size:0.6rem; color:var(--text3); letter-spacing:1px; }
   .lbmeta { font-size:0.7rem; color:var(--text3); text-align:right; line-height:1.7; }
@@ -1372,7 +1374,7 @@ export default function App() {
                       <div className="rank">{i + 1}</div>
                       <div>
                         <div className="lbn">
-                          {p.name} {isMe && <span className="xs" style={{color:'var(--gold)'}}>( you )</span>}
+                          {p.name} {isMe && <span className="lbn-you">( you )</span>}
                         </div>
                         <div className="pb">
                           <div className="pbf" style={{width:`${topPts ? (p.points/topPts)*100 : 0}%`}} />
@@ -1642,32 +1644,47 @@ export default function App() {
               <div className="empty" style={{paddingTop:20}}><p className="sm muted">No entries yet</p></div>
             ) : (
               <div style={{background:"var(--surface)", border:"1px solid var(--border)", borderRadius:8, padding:18}}>
-                {leaderboard.map((p, i) => {
-                  const paid = participants[p.id]?.paid || false;
-                  return (
-                    <div key={p.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
-                      padding:"10px 0", borderBottom: i < leaderboard.length-1 ? "1px solid var(--border)" : "none"}}>
-                      <div>
-                        <span className="sm">{p.name}</span>
-                        {p.email && <span className="xs muted" style={{marginLeft:8}}>{p.email}</span>}
+                {[...leaderboard]
+                  .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity:'base'}))
+                  .map((p, i, arr) => {
+                    const paid = participants[p.id]?.paid || false;
+                    const isMe = sanitize(p.name || '') === myKey;
+                    return (
+                      <div key={p.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+                        padding:"11px 0", borderBottom: i < arr.length-1 ? "1px solid var(--border)" : "none",
+                        background: isMe ? "rgba(148,163,184,0.04)" : "transparent",
+                        borderRadius: isMe ? 4 : 0,
+                        marginLeft: isMe ? -8 : 0,
+                        marginRight: isMe ? -8 : 0,
+                        paddingLeft: isMe ? 8 : 0,
+                        paddingRight: isMe ? 8 : 0,
+                      }}>
+                        <div style={{display:'flex', alignItems:'center', gap:8, minWidth:0}}>
+                          <div>
+                            <div style={{display:'flex', alignItems:'center', gap:6}}>
+                              <span className="sm" style={{color: isMe ? '#b4c4d4' : 'var(--text)'}}>{p.name}</span>
+                              {isMe && <span style={{fontSize:'0.58rem', color:'#94a3b8', letterSpacing:'1px', textTransform:'uppercase', fontFamily:"'JetBrains Mono',monospace"}}>you</span>}
+                            </div>
+                            {p.email && <div className="xs muted" style={{marginTop:1}}>{p.email}</div>}
+                          </div>
+                        </div>
+                        <div className="row gap8" style={{alignItems:"center", flexShrink:0}}>
+                          <span className="xs muted mono">{Object.values(p.picks||{}).filter(pk=>pk.winner&&pk.games).length}/{totalSeries} picks</span>
+                          <span className="sm gold mono">{p.points}pts</span>
+                          <span className="xs muted">{p.submittedAt ? new Date(p.submittedAt).toLocaleDateString() : ""}</span>
+                          <label style={{display:"flex", alignItems:"center", gap:5, cursor:"pointer", userSelect:"none", marginLeft:4}}>
+                            <input
+                              type="checkbox"
+                              checked={paid}
+                              onChange={() => handlePaidToggle(p.id, paid)}
+                              style={{accentColor:"var(--green)", width:14, height:14, cursor:"pointer"}}
+                            />
+                            <span className="xs" style={{color: paid ? "var(--green)" : "var(--text3)"}}>Paid</span>
+                          </label>
+                        </div>
                       </div>
-                      <div className="row gap8" style={{alignItems:"center"}}>
-                        <span className="xs muted mono">{Object.values(p.picks||{}).filter(pk=>pk.winner&&pk.games).length}/{totalSeries} picks</span>
-                        <span className="sm gold mono">{p.points}pts</span>
-                        <span className="xs muted">{p.submittedAt ? new Date(p.submittedAt).toLocaleDateString() : ""}</span>
-                        <label style={{display:"flex", alignItems:"center", gap:5, cursor:"pointer", userSelect:"none", marginLeft:4}}>
-                          <input
-                            type="checkbox"
-                            checked={paid}
-                            onChange={() => handlePaidToggle(p.id, paid)}
-                            style={{accentColor:"var(--green)", width:14, height:14, cursor:"pointer"}}
-                          />
-                          <span className="xs" style={{color: paid ? "var(--green)" : "var(--text3)"}}>Paid</span>
-                        </label>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             )}
           </div>
