@@ -356,7 +356,7 @@ const css = `
   .bm-team:disabled { cursor:default; }
   .bm-team.sel   { background:rgba(201,168,76,0.1); color:var(--gold2); }
   .bm-team.ok    { background:rgba(34,197,94,0.1); color:var(--green); }
-  .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); }
+  .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); text-decoration:line-through; }
   .bm-team.wrong .bm-logo { opacity:0.5; filter:grayscale(0.35) saturate(0.6); }
   .bm-team.sel .bm-logo { filter:drop-shadow(0 0 5px rgba(240,198,90,0.5)); }
   .bm-team.ok  .bm-logo { filter:drop-shadow(0 0 5px rgba(34,197,94,0.4)); }
@@ -388,6 +388,33 @@ const css = `
   .brk-finals-label { display:flex; flex-direction:column; align-items:center;
     justify-content:center; padding-bottom:10px; }
   .brk-finals-icon { font-size:1.1rem; line-height:1; margin-bottom:2px; }
+
+  /* ─── Scenario Tab ─────────────────────────────────────────────────────────── */
+  .scenario-layout { display:flex; gap:24px; align-items:flex-start; }
+  .scenario-lb-col { width:260px; flex-shrink:0; }
+  .scenario-bracket-col { flex:1; min-width:0; }
+  @media(max-width:860px) {
+    .scenario-layout { flex-direction:column; }
+    .scenario-lb-col { width:100%; }
+  }
+  .scenario-lb-row { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:8px;
+    padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; }
+  .scenario-lb-row + .scenario-lb-row { margin-top:5px; }
+  .scenario-lb-row.me { border-color:rgba(201,168,76,0.5); background:rgba(201,168,76,0.04); }
+  .scenario-rank { font-family:'Bebas Neue',sans-serif; font-size:1.05rem; color:var(--text3); }
+  .scenario-lb-row.me .scenario-rank { color:var(--gold2); }
+  .scenario-name { font-size:0.8rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .scenario-pts { font-family:'Bebas Neue',sans-serif; font-size:1.25rem; color:var(--gold); text-align:right; }
+
+  /* ─── Print styles ────────────────────────────────────────────────────────── */
+  @media print {
+    .tabs, .hdr .row, .legend, .form, .alert, .toast { display:none !important; }
+    .app { padding:0 8px; max-width:100%; }
+    body { background:white !important; color:#111 !important; }
+    :root { --bg:white; --surface:white; --surface2:#f5f5f5; --surface3:#eee;
+      --border:#ccc; --border2:#bbb; --text:#111; --text2:#333; --text3:#666; }
+    .bm, .sc { break-inside:avoid; }
+  }
 
 `;
 
@@ -581,11 +608,15 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   };
 
   const teamClass = (team) => {
-    if (pick.winner !== team) return "";
-    if (settled) return pick.winner === result.winner ? "ok" : "wrong";
-    // Not settled — show red if team is already eliminated
+    if (settled) {
+      // Only the picked team gets ok/wrong in settled series
+      if (pick.winner !== team) return "";
+      return pick.winner === result.winner ? "ok" : "wrong";
+    }
+    // Not settled — show red for ANY eliminated team (whether picked or not)
     if (eliminatedTeams?.has(team)) return "wrong";
-    return "sel";
+    if (pick.winner === team) return "sel";
+    return "";
   };
 
   const gamesClass = (g) => {
@@ -866,6 +897,32 @@ function BracketView({ picks, onPick, readOnly, results }) {
   );
 }
 
+// ─── Scenario Helpers ─────────────────────────────────────────────────────────
+// Build a complete results structure from BRACKET_CONFIG, filling in winners from
+// admin results first, then scenario picks for any unsettled series.
+function buildScenarioResults(actualResults, scenarioPicks) {
+  // Collect admin-set results by series ID
+  const adminResults = {};
+  (actualResults?.rounds || []).forEach(round => {
+    const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
+    arr.forEach(s => { if (s?.id && s?.winner) adminResults[s.id] = { winner: s.winner, games: s.games }; });
+  });
+  // Build complete structure from BRACKET_CONFIG (all 15 series present)
+  return {
+    ...actualResults,
+    rounds: BRACKET_CONFIG.rounds.map(round => ({
+      ...round,
+      series: round.series.map(series => {
+        const admin = adminResults[series.id];
+        if (admin?.winner) return { ...series, ...admin };          // Admin result wins
+        const sp = scenarioPicks?.[series.id];
+        if (sp?.winner) return { ...series, winner: sp.winner, games: sp.games || null }; // Scenario pick
+        return { ...series, winner: null, games: null };            // No result yet
+      }),
+    })),
+  };
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -883,6 +940,7 @@ export default function App() {
   const [adminPass,    setAdminPass]    = useState("");
   const [picksLocked,  setPicksLocked]  = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
+  const [scenarioPicks, setScenarioPicks] = useState({});  // local session-only scenario picks
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -995,6 +1053,53 @@ export default function App() {
     }
   };
 
+  // ── Scenario ──
+  const handleScenarioPick = (seriesId, pick) => {
+    // Don't allow changing admin-settled series in scenario
+    const isSettled = (results?.rounds || [])
+      .flatMap(r => Array.isArray(r.series) ? r.series : Object.values(r.series || {}))
+      .some(s => s?.id === seriesId && s?.winner != null);
+    if (isSettled) return;
+    setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+  };
+  const handleScenarioAutoFill = () => {
+    const eliminated = getEliminatedTeams(results);
+    const filled = {};
+    Object.entries(myPicks).forEach(([sid, pick]) => {
+      if (pick?.winner && !eliminated.has(pick.winner)) filled[sid] = pick;
+    });
+    setScenarioPicks(filled);
+  };
+  const handleScenarioClear = () => setScenarioPicks({});
+
+  // ── Admin: paid status toggle ──
+  const handlePaidToggle = async (participantKey, currentPaid) => {
+    try {
+      const updates = {};
+      updates[`participants/${participantKey}/paid`] = !currentPaid;
+      await update(ref(db), updates);
+    } catch (e) {
+      showToast("Error updating payment status");
+      console.error(e);
+    }
+  };
+
+  // ── Admin: export participants CSV ──
+  const handleExport = () => {
+    const rows = [["Name", "Email", "Paid", "Points", "Submitted"]];
+    leaderboard.forEach(p => {
+      const paid = participants[p.id]?.paid ? "Yes" : "No";
+      const submitted = p.submittedAt ? new Date(p.submittedAt).toLocaleDateString() : "";
+      rows.push([p.name || "", p.email || "", paid, p.points, submitted]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "playoff-pool-entries.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ── Admin: set series result ──
   const handleAdminSet = async (seriesId, field, value) => {
     try {
@@ -1027,6 +1132,10 @@ export default function App() {
 
   // ── Pool stats ──
   const completedCount = (results?.rounds || []).flatMap(r => r.series).filter(s => s.winner).length;
+
+  // ── Scenario ──
+  const scenarioResults     = buildScenarioResults(results, scenarioPicks);
+  const scenarioLeaderboard = buildLeaderboard(participants, scenarioResults);
 
   // ── Admin: resolve bracket using actual results so later rounds show real team names ──
   const resultsAsPicks = {};
@@ -1064,6 +1173,7 @@ export default function App() {
           {[
             { id:"picks",       label:"My Picks" },
             { id:"leaderboard", label:`Leaderboard (${Object.keys(participants).length})` },
+            { id:"scenario",    label:"Scenario" },
             { id:"stats",       label:"Pool Stats" },
             { id:"admin",       label:"⚙ Admin" },
           ].map(t => (
@@ -1117,6 +1227,9 @@ export default function App() {
               <div className="row gap8 wrap">
                 <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !myEmail.trim() || saving || picksLocked}>
                   {saving ? "Saving…" : submitted ? "Update Picks" : "Submit Picks"}
+                </button>
+                <button className="btn btn-ghost" onClick={() => window.print()} title="Print your picks bracket">
+                  🖨 Print Picks
                 </button>
                 {picksLocked
                   ? <span className="xs" style={{color:"var(--red)"}}>🔒 Picks locked</span>
@@ -1212,6 +1325,81 @@ export default function App() {
           </div>
         )}
 
+        {/* ══ SCENARIO ════════════════════════════════════════════════════════ */}
+        {tab === "scenario" && (
+          <div>
+            {!picksLocked ? (
+              <div className="empty">
+                <h3>Unlocks After Deadline</h3>
+                <p className="sm">The Scenario Simulator becomes available once picks are locked by the admin.</p>
+              </div>
+            ) : (
+              <>
+                <div className="row between mb16 wrap gap8">
+                  <div>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif", fontSize:"1rem", letterSpacing:"2px", color:"var(--text2)"}}>
+                      SCENARIO SIMULATOR
+                    </div>
+                    <div className="xs muted mt8">Pick hypothetical outcomes for remaining series · see how standings would shift</div>
+                  </div>
+                  <div className="row gap8">
+                    <button className="btn btn-ghost" style={{fontSize:"0.72rem"}} onClick={handleScenarioAutoFill}>↺ Auto-fill My Picks</button>
+                    <button className="btn btn-danger" style={{fontSize:"0.72rem"}} onClick={handleScenarioClear}>✕ Clear Scenario</button>
+                  </div>
+                </div>
+
+                <div className="scenario-layout">
+                  {/* Left column: projected leaderboard */}
+                  <div className="scenario-lb-col">
+                    <div className="xs muted mb8" style={{letterSpacing:"1.5px", textTransform:"uppercase", borderBottom:"1px solid var(--border)", paddingBottom:6}}>
+                      Projected Standings
+                    </div>
+                    <div style={{marginTop:8}}>
+                      {scenarioLeaderboard.map((p, i) => {
+                        const isMe = sanitize(p.name || "") === myKey;
+                        const baseEntry = leaderboard.find(b => b.id === p.id);
+                        const delta = p.points - (baseEntry?.points || 0);
+                        return (
+                          <div key={p.id} className={`scenario-lb-row ${isMe ? "me" : ""}`}>
+                            <div className="scenario-rank">{i + 1}</div>
+                            <div style={{minWidth:0}}>
+                              <div className="scenario-name">
+                                {p.name}
+                                {isMe && <span style={{color:'var(--gold)', marginLeft:4, fontSize:'0.62rem'}}>(you)</span>}
+                              </div>
+                              {delta !== 0 && (
+                                <div style={{fontSize:'0.6rem', color: delta > 0 ? 'var(--green)' : 'var(--red)', fontFamily:"'JetBrains Mono',monospace", marginTop:1}}>
+                                  {delta > 0 ? `+${delta}` : delta} pts
+                                </div>
+                              )}
+                            </div>
+                            <div className="scenario-pts">{p.points}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Right column: scenario bracket */}
+                  <div className="scenario-bracket-col">
+                    <div className="xs muted mb8" style={{letterSpacing:"1.5px", textTransform:"uppercase", borderBottom:"1px solid var(--border)", paddingBottom:6}}>
+                      Scenario Bracket — click to pick remaining series
+                    </div>
+                    <div style={{marginTop:8}}>
+                      <BracketView
+                        picks={scenarioPicks}
+                        onPick={handleScenarioPick}
+                        readOnly={false}
+                        results={results}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* ══ STATS ══════════════════════════════════════════════════════════ */}
         {tab === "stats" && (
           <div>
@@ -1242,21 +1430,32 @@ export default function App() {
                     const pickTop = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.top).length;
                     const pickBot = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.bottom).length;
 
-                    return [
-                      { team: series.top, count: pickTop },
-                      { team: series.bottom, count: pickBot }
-                    ].map(({ team, count }) => {
-                      const pct = total ? Math.round((count/total)*100) : 0;
-                      return (
-                        <div key={team} className="pr">
-                          <span style={{color: rs.winner === team ? "var(--green)" : "var(--text2)"}}>
-                            {team} {rs.winner === team && "✓"}
-                          </span>
-                          <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
-                          <span className="pct">{pct}%</span>
+                    return (
+                      <div key={series.id} style={{marginBottom:14}}>
+                        {/* Matchup label */}
+                        <div style={{display:'flex', alignItems:'center', gap:7, marginBottom:5}}>
+                          <span className={`conf conf-${series.conference}`}>{series.conference}</span>
+                          {series.topSeed != null && (
+                            <span className="xs mono muted">{series.topSeed} vs {series.bottomSeed}</span>
+                          )}
                         </div>
-                      );
-                    });
+                        {[
+                          { team: series.top, count: pickTop },
+                          { team: series.bottom, count: pickBot }
+                        ].map(({ team, count }) => {
+                          const pct = total ? Math.round((count/total)*100) : 0;
+                          return (
+                            <div key={team} className="pr">
+                              <span style={{color: rs.winner === team ? "var(--green)" : "var(--text2)"}}>
+                                {team} {rs.winner === team && "✓"}
+                              </span>
+                              <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
+                              <span className="pct">{pct}%</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
                   })}
                 </div>
               );
@@ -1330,25 +1529,42 @@ export default function App() {
               );
             })}
 
-            <div className="sec" style={{marginTop:28}}>Participant Entries</div>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:28, marginBottom:10}}>
+              <div className="sec" style={{margin:0, flex:1}}>Participant Entries</div>
+              <button className="btn btn-ghost" style={{fontSize:"0.7rem", flexShrink:0, marginLeft:14}} onClick={handleExport}>
+                ↓ Export CSV
+              </button>
+            </div>
             {leaderboard.length === 0 ? (
               <div className="empty" style={{paddingTop:20}}><p className="sm muted">No entries yet</p></div>
             ) : (
               <div style={{background:"var(--surface)", border:"1px solid var(--border)", borderRadius:8, padding:18}}>
-                {leaderboard.map((p, i) => (
-                  <div key={p.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
-                    padding:"10px 0", borderBottom: i < leaderboard.length-1 ? "1px solid var(--border)" : "none"}}>
-                    <div>
-                      <span className="sm">{p.name}</span>
-                      {p.email && <span className="xs muted" style={{marginLeft:8}}>{p.email}</span>}
+                {leaderboard.map((p, i) => {
+                  const paid = participants[p.id]?.paid || false;
+                  return (
+                    <div key={p.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"10px 0", borderBottom: i < leaderboard.length-1 ? "1px solid var(--border)" : "none"}}>
+                      <div>
+                        <span className="sm">{p.name}</span>
+                        {p.email && <span className="xs muted" style={{marginLeft:8}}>{p.email}</span>}
+                      </div>
+                      <div className="row gap8" style={{alignItems:"center"}}>
+                        <span className="xs muted mono">{Object.values(p.picks||{}).filter(pk=>pk.winner&&pk.games).length}/{totalSeries} picks</span>
+                        <span className="sm gold mono">{p.points}pts</span>
+                        <span className="xs muted">{p.submittedAt ? new Date(p.submittedAt).toLocaleDateString() : ""}</span>
+                        <label style={{display:"flex", alignItems:"center", gap:5, cursor:"pointer", userSelect:"none", marginLeft:4}}>
+                          <input
+                            type="checkbox"
+                            checked={paid}
+                            onChange={() => handlePaidToggle(p.id, paid)}
+                            style={{accentColor:"var(--green)", width:14, height:14, cursor:"pointer"}}
+                          />
+                          <span className="xs" style={{color: paid ? "var(--green)" : "var(--text3)"}}>Paid</span>
+                        </label>
+                      </div>
                     </div>
-                    <div className="row gap8">
-                      <span className="xs muted mono">{Object.values(p.picks||{}).filter(pk=>pk.winner&&pk.games).length}/{totalSeries} picks</span>
-                      <span className="sm gold mono">{p.points}pts</span>
-                      <span className="xs muted">{p.submittedAt ? new Date(p.submittedAt).toLocaleDateString() : ""}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
