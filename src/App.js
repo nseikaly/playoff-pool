@@ -514,12 +514,17 @@ function resolveBracket(picks) {
 // chosen team no longer appears in that slot (e.g. the user changed their R1
 // pick so R2 now shows a different team). Runs up to 3 passes to cascade all
 // the way from R2 → R3 → R4 in one call.
-function cleanDownstreamPicks(picks) {
+function cleanDownstreamPicks(picks, basePicks = {}) {
   let cleaned = picks;
   for (let pass = 0; pass < 3; pass++) {
-    const resolved = resolveBracket(cleaned);
+    // Merge admin-settled results (basePicks) so resolveBracket can substitute
+    // real team names instead of BRACKET_CONFIG placeholders.
+    const resolveSource = { ...basePicks, ...cleaned };
+    const resolved = resolveBracket(resolveSource);
     for (const round of resolved) {
       for (const series of round.series) {
+        // Never clear a pick for a series that admin has already settled.
+        if (basePicks[series.id]) continue;
         const pick = cleaned[series.id];
         if (pick?.winner && pick.winner !== series.top && pick.winner !== series.bottom) {
           cleaned = { ...cleaned, [series.id]: { ...pick, winner: undefined } };
@@ -534,7 +539,7 @@ function cleanDownstreamPicks(picks) {
 
 function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results, onAdminSet }) {
   const pick    = picks?.[series.id] || {};
-  const result  = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
+  const result  = getAdminResultForSeries(results, series.id);
   const settled = result?.winner != null;
 
   // Seed resolution — works for any round once teams are known
@@ -650,7 +655,7 @@ function shortTeamName(fullName) {
 
 function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams, topGhost, bottomGhost }) {
   const pick   = picks?.[series.id] || {};
-  const result = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
+  const result = getAdminResultForSeries(results, series.id);
   const settled = result?.winner != null;
 
   const topSeed    = TEAM_SEEDS[series.top];
@@ -850,9 +855,7 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
     const series = seriesMap[sid];
     if (!series) return null;
     const round = roundMap[sid];
-    const resultRound = results?.rounds?.find(r => r.id === round?.id);
-    const si = round?.series?.findIndex(s => s.id === sid);
-    const rs = resultRound?.series?.[si];
+    const rs = getAdminResultForSeries(results, sid);
     const merged = { ...series, winner: rs?.winner ?? null, games: rs?.games ?? null };
 
     if (scenarioMode) {
@@ -1048,9 +1051,13 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
 // Build a complete results structure from BRACKET_CONFIG, filling in winners from
 // admin results first, then scenario picks for any unsettled series.
 function buildScenarioResults(actualResults, scenarioPicks) {
-  // Collect admin-set results by series ID
+  // Collect admin-set results by series ID.
+  // Firebase may return rounds as a plain numeric-keyed object, so normalise.
   const adminResults = {};
-  (actualResults?.rounds || []).forEach(round => {
+  const roundsArr = Array.isArray(actualResults?.rounds)
+    ? actualResults.rounds
+    : Object.values(actualResults?.rounds || {});
+  roundsArr.forEach(round => {
     const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
     arr.forEach(s => { if (s?.id && s?.winner) adminResults[s.id] = { winner: s.winner, games: s.games }; });
   });
@@ -1079,10 +1086,11 @@ function buildScenarioResults(actualResults, scenarioPicks) {
 // Used by BracketView (via resolveBracket) in scenario mode.
 function resolveForScenario(myPicks, scenarioPicks, results) {
   const adminWinners = {};
-  (results?.rounds || []).forEach(round => {
-    const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
-    arr.forEach(s => { if (s?.id && s?.winner) adminWinners[s.id] = s.winner; });
-  });
+  (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
+    .forEach(round => {
+      const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
+      arr.forEach(s => { if (s?.id && s?.winner) adminWinners[s.id] = s.winner; });
+    });
   const combined = {};
   BRACKET_CONFIG.rounds.forEach(round => {
     round.series.forEach(series => {
@@ -1103,7 +1111,12 @@ function resolveForScenario(myPicks, scenarioPicks, results) {
 // and object Firebase data shapes.  Returns the series object (with .winner /
 // .games) if found, otherwise null.
 function getAdminResultForSeries(results, sid) {
-  for (const round of (results?.rounds || [])) {
+  // Firebase may return results.rounds as a plain numeric-keyed object instead of
+  // a JS array, so we normalise with Object.values() when needed.
+  const rounds = results?.rounds;
+  if (!rounds) return null;
+  const roundsArr = Array.isArray(rounds) ? rounds : Object.values(rounds);
+  for (const round of roundsArr) {
     const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
     for (const s of arr) {
       if (s?.id === sid && s?.winner) return s;
@@ -1402,12 +1415,24 @@ export default function App() {
 
   // ── Scenario ──
   const handleScenarioPick = (seriesId, pick) => {
+    // Normalise Firebase plain-object rounds to a real array once, then reuse.
+    const roundsArr = Array.isArray(results?.rounds)
+      ? results.rounds
+      : Object.values(results?.rounds || {});
     // Don't allow changing admin-settled series in scenario
-    const isSettled = (results?.rounds || [])
+    const isSettled = roundsArr
       .flatMap(r => Array.isArray(r.series) ? r.series : Object.values(r.series || {}))
       .some(s => s?.id === seriesId && s?.winner != null);
     if (isSettled) return;
-    setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+    // Build a basePicks map of all admin-settled results so cleanDownstreamPicks
+    // can resolve real team names (instead of BRACKET_CONFIG placeholders) when
+    // validating whether the new pick still belongs in its slot.
+    const adminPicks = {};
+    roundsArr.forEach(round => {
+      const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
+      arr.forEach(s => { if (s?.id && s?.winner) adminPicks[s.id] = { winner: s.winner }; });
+    });
+    setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, adminPicks));
   };
   const handleScenarioAutoFill = () => {
     const eliminated = getEliminatedTeams(results);
@@ -1479,7 +1504,9 @@ export default function App() {
   const eliminatedTeams = getEliminatedTeams(results);
 
   // ── Pool stats ──
-  const completedCount = (results?.rounds || []).flatMap(r => r.series).filter(s => s.winner).length;
+  const completedCount = (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
+    .flatMap(r => Array.isArray(r.series) ? r.series : Object.values(r.series || {}))
+    .filter(s => s?.winner).length;
 
   // ── Scenario ──
   const scenarioResults     = buildScenarioResults(results, scenarioPicks);
@@ -1487,9 +1514,11 @@ export default function App() {
 
   // ── Admin: resolve bracket using actual results so later rounds show real team names ──
   const resultsAsPicks = {};
-  (results?.rounds || []).flatMap(r => r.series || []).forEach(s => {
-    if (s?.id && s?.winner) resultsAsPicks[s.id] = { winner: s.winner, games: s.games };
-  });
+  (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
+    .flatMap(r => Array.isArray(r.series) ? r.series : Object.values(r.series || {}))
+    .forEach(s => {
+      if (s?.id && s?.winner) resultsAsPicks[s.id] = { winner: s.winner, games: s.games };
+    });
   const resolvedAdminRounds = resolveBracket(resultsAsPicks);
 
   if (loading) return (
@@ -1802,19 +1831,19 @@ export default function App() {
             </div>
 
             {BRACKET_CONFIG.rounds.map((round, ri) => {
-              const resultRound = results?.rounds?.[ri];
-              const completedSeries = round.series.filter((_, si) => resultRound?.series?.[si]?.winner);
+              const completedSeries = round.series.filter(s => getAdminResultForSeries(results, s.id)?.winner);
               if (completedSeries.length === 0) return null;
 
               return (
                 <div key={round.id}>
                   <div className="sec">{round.name} — Pick Distribution</div>
-                  {round.series.map((series, si) => {
-                    const rs = resultRound?.series?.[si];
+                  {round.series.map((series) => {
+                    const rs = getAdminResultForSeries(results, series.id);
                     if (!rs?.winner) return null;
                     const total = Object.keys(participants).length;
                     const pickTop = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.top).length;
                     const pickBot = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.bottom).length;
+                    const myPickWinner = myPicks?.[series.id]?.winner;
 
                     return (
                       <div key={series.id} style={{marginBottom:14}}>
@@ -1830,10 +1859,17 @@ export default function App() {
                           { team: series.bottom, count: pickBot }
                         ].map(({ team, count }) => {
                           const pct = total ? Math.round((count/total)*100) : 0;
+                          const isWinner = rs.winner === team;
+                          const isMyPick = myPickWinner === team;
                           return (
                             <div key={team} className="pr">
-                              <span style={{color: rs.winner === team ? "var(--green)" : "var(--text2)"}}>
-                                {team} {rs.winner === team && "✓"}
+                              <span style={{color: isWinner ? "var(--green)" : "var(--text2)"}}>
+                                {team} {isWinner && "✓"}
+                                {isMyPick && (
+                                  <span style={{fontSize:'0.6rem', color:'var(--gold)', fontFamily:"'JetBrains Mono',monospace", marginLeft:5, fontWeight:600}}>
+                                    ← your pick
+                                  </span>
+                                )}
                               </span>
                               <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
                               <span className="pct">{pct}%</span>
