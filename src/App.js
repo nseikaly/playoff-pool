@@ -340,12 +340,55 @@ const css = `
   .bm-hdr { display:flex; align-items:center; justify-content:space-between; padding:5px 10px;
     background:var(--surface3); border-bottom:1px solid var(--border); }
 
-  /* Ghost pick label — shows participant's original pick when displaced by admin results */
-  .bm-ghost-wrap { display:flex; align-items:center; gap:3px; }
-  .bm-ghost-pick { font-size:0.56rem; font-family:'JetBrains Mono',monospace;
-    color:rgba(239,68,68,0.8); text-decoration:line-through; white-space:nowrap;
-    overflow:hidden; text-overflow:ellipsis; max-width:70px; line-height:1.2; }
-  .bm-ghost-lbl { font-size:0.5rem; color:var(--text3); letter-spacing:0.2px; white-space:nowrap; }
+  /* Ghost pick — shows eliminated pick inline within the matchup card (between teams & games) */
+  .bm-ghost-row { display:flex; align-items:center; gap:6px; padding:5px 10px;
+    background:rgba(239,68,68,0.04); border-top:1px solid rgba(239,68,68,0.12);
+    border-bottom:1px solid var(--border); }
+  .bm-ghost-name { font-size:0.62rem; color:rgba(239,68,68,0.7); text-decoration:line-through;
+    font-weight:600; font-family:'JetBrains Mono',monospace; line-height:1.2; }
+  .bm-ghost-arrow { font-size:0.52rem; color:var(--text3); letter-spacing:0.2px; white-space:nowrap; }
+
+  /* ─── Info Button & Panel ─────────────────────────────────────────────── */
+  .info-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px;
+    background:rgba(255,255,255,0.03); border:1px solid var(--border2); border-radius:20px;
+    color:var(--text3); font-size:0.65rem; letter-spacing:1.2px; text-transform:uppercase;
+    font-weight:600; font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.2s;
+    flex-shrink:0; }
+  .info-btn:hover { border-color:var(--gold); color:var(--gold); background:rgba(201,168,76,0.05); }
+  .info-btn-icon { font-style:normal; font-size:0.78rem; line-height:1; }
+
+  .info-backdrop { position:fixed; inset:0; background:rgba(4,7,13,0.75); z-index:300;
+    display:flex; align-items:flex-start; justify-content:flex-end;
+    padding:64px 20px 40px; backdrop-filter:blur(4px); animation:ov-fade 0.18s ease; }
+  .info-panel { width:370px; max-height:calc(100vh - 104px); overflow-y:auto;
+    background:var(--surface); border:1px solid var(--border2); border-radius:12px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5); animation:ov-rise 0.2s ease; flex-shrink:0; }
+  .info-panel::-webkit-scrollbar { width:4px; }
+  .info-panel::-webkit-scrollbar-track { background:transparent; }
+  .info-panel::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+  .info-hdr { display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:var(--surface); z-index:1; }
+  .info-title { font-family:'Bebas Neue',sans-serif; font-size:1.05rem; letter-spacing:3px; color:var(--text); }
+  .info-close { width:28px; height:28px; background:var(--surface2); border:1px solid var(--border2);
+    border-radius:6px; color:var(--text2); cursor:pointer; font-size:0.9rem;
+    display:flex; align-items:center; justify-content:center; transition:all 0.15s; flex-shrink:0; }
+  .info-close:hover { border-color:var(--gold); color:var(--gold); }
+  .info-body { padding:14px 18px 20px; }
+  .info-section { margin-bottom:16px; }
+  .info-section:last-child { margin-bottom:0; }
+  .info-sec-title { font-family:'Bebas Neue',sans-serif; font-size:0.7rem; letter-spacing:2.5px;
+    color:var(--text3); text-transform:uppercase; margin-bottom:8px; padding-bottom:5px;
+    border-bottom:1px solid var(--border); }
+  .info-row { display:flex; gap:8px; align-items:flex-start; margin-bottom:6px; }
+  .info-row:last-child { margin-bottom:0; }
+  .info-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:5px; }
+  .info-text { font-size:0.77rem; color:var(--text2); line-height:1.55; }
+  .info-text strong { color:var(--text); }
+  .info-legend-row { display:flex; align-items:center; gap:8px; padding:4px 8px; border-radius:4px;
+    background:var(--surface2); margin-bottom:4px; }
+  .info-legend-swatch { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .info-legend-text { font-size:0.72rem; color:var(--text2); }
   .bm-conf { font-size:0.55rem; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; }
   .bm-conf.East { color:#7b9ff5; }
   .bm-conf.West { color:#fb923c; }
@@ -652,8 +695,8 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
     if (pick.winner !== result.winner) return "wrong-games";
     // Correct winner + exact games → green
     if (pick.games === result.games) return "exact";
-    // Correct winner + wrong games → gold (got the series right, missed the count)
-    return "sel";
+    // Correct winner + wrong games → red (missed the game count)
+    return "wrong-games";
   };
 
   const hasPick = pick.winner && pick.games;
@@ -668,19 +711,11 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
     <div className={`bm ${settled ? "done" : ""}`} style={settled ? {borderLeft:`3px solid ${confBorderColor}`} : {}}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
-        <div style={{display:'flex', alignItems:'center', gap:5}}>
-          {ghostPick && (
-            <span className="bm-ghost-wrap" title={`Your original pick: ${ghostPick}`}>
-              <span className="bm-ghost-pick">{shortTeamName(ghostPick)}</span>
-              <span className="bm-ghost-lbl">← your pick</span>
-            </span>
-          )}
-          {settled && (
-            <span className="bm-result" style={{color: confBorderColor}}>
-              ✓ {resultName} in {result.games}
-            </span>
-          )}
-        </div>
+        {settled && (
+          <span className="bm-result" style={{color: confBorderColor}}>
+            ✓ {resultName} in {result.games}
+          </span>
+        )}
       </div>
       <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
         <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
@@ -692,6 +727,13 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
         <span className="bm-name">{series.bottom}</span>
         {bottomSeed != null && <span className="bm-seed">#{bottomSeed}</span>}
       </button>
+      {ghostPick && (
+        <div className="bm-ghost-row" title={`Your original pick for this round: ${ghostPick}`}>
+          <TeamLogo name={ghostPick} size={13} state="wrong" />
+          <span className="bm-ghost-name">{shortTeamName(ghostPick)}</span>
+          <span className="bm-ghost-arrow">← your pick (eliminated)</span>
+        </div>
+      )}
       <div className="bm-games">
         <span className="bm-gl">G</span>
         {GAME_OPTIONS.map(g => (
@@ -1000,7 +1042,9 @@ function buildScenarioResults(actualResults, scenarioPicks) {
 // ─── Scenario Resolution ──────────────────────────────────────────────────────
 // Builds a "picks-like" object that determines which team names appear in each
 // bracket slot for the scenario view.
-// Priority order: admin results > scenario picks > participant's my picks.
+// Priority order: admin results > scenario picks > blank (NOT myPicks).
+// Unsettled slots with no scenario pick show generic placeholders so the user
+// must pick manually (or use Auto-fill) — never pre-filled with participant picks.
 // Used by BracketView (via resolveBracket) in scenario mode.
 function resolveForScenario(myPicks, scenarioPicks, results) {
   const adminWinners = {};
@@ -1016,12 +1060,168 @@ function resolveForScenario(myPicks, scenarioPicks, results) {
         combined[sid] = { winner: adminWinners[sid] };
       } else if (scenarioPicks[sid]?.winner) {
         combined[sid] = scenarioPicks[sid];
-      } else if (myPicks[sid]?.winner) {
-        combined[sid] = { winner: myPicks[sid].winner };
       }
+      // No myPicks fallback — unsettled slots remain blank placeholders
     });
   });
   return combined;
+}
+
+// ─── Info Modal ───────────────────────────────────────────────────────────────
+
+function InfoModal({ tab, onClose }) {
+  const INFO = {
+    picks: {
+      title: "MY PICKS — HOW TO PLAY",
+      sections: [
+        {
+          title: "Filling Out Your Bracket",
+          items: [
+            { dot:"var(--gold)",  text: <><strong>Click a team</strong> in each matchup to pick the winner, then select the number of games you think the series lasts.</> },
+            { dot:"var(--gold)",  text: <>Work your way through <strong>all 4 rounds</strong> — First Round → Conf Semis → Conf Finals → NBA Finals. Later rounds unlock as you complete earlier ones.</> },
+            { dot:"var(--cyan)",  text: <>You must pick <strong>all 15 series</strong> before you can submit. The counter at the bottom shows your progress.</> },
+            { dot:"var(--green)", text: <>You can <strong>update picks any time</strong> before the deadline — just resubmit with the same name and your picks will be overwritten.</> },
+            { dot:"var(--red)",   text: <>Once the admin <strong>locks picks</strong>, no new entries or changes are accepted.</> },
+          ]
+        },
+        {
+          title: "Scoring System",
+          items: [
+            { dot:"var(--text3)", text: <><span style={{color:'var(--gold)',fontWeight:700}}>10 pts</span> — Round 1 winner correct &nbsp;·&nbsp; <span style={{color:'var(--gold)',fontWeight:700}}>+5 pts</span> if exact games</> },
+            { dot:"var(--text3)", text: <><span style={{color:'var(--gold)',fontWeight:700}}>20 pts</span> — Conf Semis winner &nbsp;·&nbsp; <span style={{color:'var(--gold)',fontWeight:700}}>+5 pts</span> exact games</> },
+            { dot:"var(--text3)", text: <><span style={{color:'var(--gold)',fontWeight:700}}>30 pts</span> — Conf Finals winner &nbsp;·&nbsp; <span style={{color:'var(--gold)',fontWeight:700}}>+10 pts</span> exact games</> },
+            { dot:"var(--gold)",  text: <><span style={{color:'var(--gold)',fontWeight:700}}>40 pts</span> — NBA Finals winner &nbsp;·&nbsp; <span style={{color:'var(--gold)',fontWeight:700}}>+10 pts</span> exact games</> },
+            { dot:"var(--text3)", text: <span style={{color:'var(--text3)',fontSize:'0.7rem'}}>Games bonus only awarded when you also picked the correct series winner.</span> },
+          ]
+        },
+        {
+          title: "Result Colour Guide",
+          items: [
+            { dot:"var(--green)",              text: <><strong style={{color:'var(--green)'}}>Green</strong> — You correctly picked this team to win ✓</> },
+            { dot:"var(--cyan)",               text: <><strong style={{color:'var(--cyan)'}}>Teal</strong> — Actual winner — you didn't pick them</> },
+            { dot:"var(--red)",                text: <><strong style={{color:'var(--red)'}}>Red / strikethrough</strong> — Your pick lost this series</> },
+            { dot:"rgba(255,255,255,0.18)",    text: <><strong style={{color:'rgba(255,255,255,0.35)'}}>Faded / strikethrough</strong> — Loser you didn't pick</> },
+            { dot:"rgba(239,68,68,0.7)",       text: <><strong style={{color:'rgba(239,68,68,0.8)'}}>Red game button</strong> — Games count was incorrect (or wrong winner)</> },
+            { dot:"var(--green)",              text: <><strong style={{color:'var(--green)'}}>Green game button</strong> — Exact game count nailed it ✓</> },
+          ]
+        },
+      ]
+    },
+    leaderboard: {
+      title: "LEADERBOARD — HOW TO READ",
+      sections: [
+        {
+          title: "Rankings",
+          items: [
+            { dot:"var(--gold)",  text: <>Sorted by <strong>total points</strong>, updated live as the admin enters results.</> },
+            { dot:"var(--cyan)",  text: <>Your row is highlighted in <strong>silver</strong> — scroll to find yourself quickly.</> },
+            { dot:"var(--text3)", text: <>Once picks are locked, <strong>tap any row</strong> to view that participant's full bracket overlay.</> },
+          ]
+        },
+        {
+          title: "Column Guide",
+          items: [
+            { dot:"var(--gold)",  text: <><strong style={{color:'var(--gold)'}}>PTS</strong> — Points earned so far from correct winner and games picks</> },
+            { dot:"var(--cyan)",  text: <><strong style={{color:'var(--cyan)'}}>MAX PTS</strong> — Best-case total if all remaining picks come through</> },
+            { dot:"var(--green)", text: <><strong style={{color:'var(--green)'}}>SERIES ✓</strong> — Count of series where you correctly predicted the winner</> },
+            { dot:"var(--amber)", text: <><strong style={{color:'var(--amber)'}}>GAMES ✓</strong> — Count of series where you also nailed the exact game count</> },
+            { dot:"var(--gold)",  text: <><strong>🏆 Finals Pick</strong> — Your predicted NBA Champion · Red strikethrough = team eliminated</> },
+          ]
+        },
+        {
+          title: "Progress Bar",
+          items: [
+            { dot:"var(--gold)",  text: <>The bar under each name shows your score as a <strong>percentage of the current leader</strong>. Silver bar = your own entry.</> },
+          ]
+        },
+      ]
+    },
+    scenario: {
+      title: "SCENARIO SIMULATOR",
+      sections: [
+        {
+          title: "How It Works",
+          items: [
+            { dot:"var(--gold)",  text: <>Pick <strong>hypothetical outcomes</strong> for upcoming series to instantly see how projected standings would shift.</> },
+            { dot:"var(--cyan)",  text: <>The <strong>Projected Standings</strong> panel (left) updates in real-time as you click teams and games.</> },
+            { dot:"var(--text3)", text: <>Series already decided by the admin are <strong>locked</strong> — they reflect real results and cannot be changed in the simulator.</> },
+            { dot:"var(--text3)", text: <>Unsettled slots start <strong>blank</strong>. Click through the bracket to fill them, or use Auto-fill.</> },
+          ]
+        },
+        {
+          title: "Buttons",
+          items: [
+            { dot:"var(--gold)", text: <><strong>↺ Auto-fill My Picks</strong> — Pre-fills remaining slots with your submitted picks (skips eliminated teams)</> },
+            { dot:"var(--red)",  text: <><strong>✕ Clear Scenario</strong> — Resets all scenario picks back to blank</> },
+          ]
+        },
+        {
+          title: "Colour Guide — Settled Series",
+          items: [
+            { dot:"var(--green)",           text: <><strong style={{color:'var(--green)'}}>Green</strong> — You correctly picked this team to win ✓</> },
+            { dot:"var(--cyan)",            text: <><strong style={{color:'var(--cyan)'}}>Teal</strong> — Actual winner — you didn't pick them</> },
+            { dot:"var(--red)",             text: <><strong style={{color:'var(--red)'}}>Red / strikethrough</strong> — Your pick that lost</> },
+            { dot:"rgba(255,255,255,0.18)", text: <><strong style={{color:'rgba(255,255,255,0.35)'}}>Faded</strong> — Loser you didn't pick</> },
+            { dot:"rgba(239,68,68,0.7)",    text: <><strong style={{color:'rgba(239,68,68,0.8)'}}>Red game button</strong> — Games count was wrong</> },
+          ]
+        },
+        {
+          title: "Eliminated Pick Indicator",
+          items: [
+            { dot:"var(--red)", text: <>If a team you originally picked for a future round has been <strong>eliminated</strong>, their name appears in <strong style={{color:'var(--red)'}}>red strikethrough</strong> inside that matchup card as a reminder.</> },
+          ]
+        },
+      ]
+    },
+    stats: {
+      title: "POOL STATS — WHAT IT MEANS",
+      sections: [
+        {
+          title: "Summary Cards",
+          items: [
+            { dot:"var(--gold)",  text: <><strong>Participants</strong> — Total number of entries submitted to the pool</> },
+            { dot:"var(--cyan)",  text: <><strong>Series Complete</strong> — How many of the 15 series have results recorded</> },
+            { dot:"var(--green)", text: <><strong>Top Score</strong> — The highest point total currently in the pool</> },
+            { dot:"var(--text3)", text: <><strong>Avg Score</strong> — Average points per participant across all entries</> },
+          ]
+        },
+        {
+          title: "Pick Distribution",
+          items: [
+            { dot:"var(--text3)", text: <>For each <strong>completed series</strong>, see what percentage of participants picked each team to win.</> },
+            { dot:"var(--green)", text: <>The <strong>green team name + ✓</strong> is the actual winner — so you can see if the pool was on the right side of history.</> },
+            { dot:"var(--cyan)",  text: <>The cyan bar and percentage show how many participants chose that team. Use this to spot consensus picks vs. contrarian ones.</> },
+          ]
+        },
+      ]
+    },
+  };
+
+  const tabContent = INFO[tab] || INFO['picks'];
+
+  return (
+    <div className="info-backdrop" onClick={onClose}>
+      <div className="info-panel" onClick={e => e.stopPropagation()}>
+        <div className="info-hdr">
+          <div className="info-title">{tabContent.title}</div>
+          <button className="info-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="info-body">
+          {tabContent.sections.map((section, si) => (
+            <div key={si} className="info-section">
+              <div className="info-sec-title">{section.title}</div>
+              {section.items.map((item, ii) => (
+                <div key={ii} className="info-row">
+                  <div className="info-dot" style={{background: item.dot}} />
+                  <div className="info-text">{item.text}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
@@ -1042,6 +1242,7 @@ export default function App() {
   const [picksLocked,  setPicksLocked]  = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
   const [scenarioPicks, setScenarioPicks] = useState({});  // local session-only scenario picks
+  const [infoOpen,      setInfoOpen]      = useState(false); // info/how-to-play panel
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -1279,13 +1480,19 @@ export default function App() {
             { id:"stats",       label:"Pool Stats" },
             { id:"admin",       label:"⚙ Admin" },
           ].map(t => (
-            <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => { setTab(t.id); setInfoOpen(false); }}>{t.label}</button>
           ))}
         </div>
 
         {/* ══ PICKS ══════════════════════════════════════════════════════════ */}
         {tab === "picks" && (
           <div>
+            <div className="row between mb16" style={{alignItems:'flex-start', gap:12}}>
+              <div style={{flex:1}} />
+              <button className="info-btn" onClick={() => setInfoOpen(true)}>
+                <span className="info-btn-icon">ℹ</span> How to Play
+              </button>
+            </div>
             <div className="legend">
               <div style={{display:'flex', gap:20, flexWrap:'wrap', width:'100%'}}>
                 <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
@@ -1351,6 +1558,9 @@ export default function App() {
                 <div style={{fontFamily:"'Bebas Neue',sans-serif", fontSize:"1rem", letterSpacing:"2px", color:"var(--text2)"}}>STANDINGS</div>
                 <div className="xs muted mt8">{completedCount} of {totalSeries} series complete</div>
               </div>
+              <button className="info-btn" onClick={() => setInfoOpen(true)}>
+                <span className="info-btn-icon">ℹ</span> Guide
+              </button>
             </div>
 
             {picksLocked && (
@@ -1454,9 +1664,12 @@ export default function App() {
                     </div>
                     <div className="xs muted mt8">Pick hypothetical outcomes for remaining series · see how standings would shift</div>
                   </div>
-                  <div className="row gap8">
+                  <div className="row gap8" style={{flexWrap:'wrap'}}>
                     <button className="btn btn-ghost" style={{fontSize:"0.72rem"}} onClick={handleScenarioAutoFill}>↺ Auto-fill My Picks</button>
                     <button className="btn btn-danger" style={{fontSize:"0.72rem"}} onClick={handleScenarioClear}>✕ Clear Scenario</button>
+                    <button className="info-btn" onClick={() => setInfoOpen(true)}>
+                      <span className="info-btn-icon">ℹ</span> Guide
+                    </button>
                   </div>
                 </div>
 
@@ -1518,6 +1731,15 @@ export default function App() {
         {/* ══ STATS ══════════════════════════════════════════════════════════ */}
         {tab === "stats" && (
           <div>
+            <div className="row between mb16">
+              <div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif", fontSize:"1rem", letterSpacing:"2px", color:"var(--text2)"}}>POOL STATS</div>
+                <div className="xs muted mt8">{completedCount} of {totalSeries} series complete</div>
+              </div>
+              <button className="info-btn" onClick={() => setInfoOpen(true)}>
+                <span className="info-btn-icon">ℹ</span> Guide
+              </button>
+            </div>
             <div className="sg">
               <div className="sc2"><div className="sv">{Object.keys(participants).length}</div><div className="sl">Participants</div></div>
               <div className="sc2"><div className="sv">{completedCount}</div><div className="sl">Series Complete</div></div>
@@ -1743,6 +1965,9 @@ export default function App() {
       })()}
 
       {toast && <div className="toast">{toast}</div>}
+
+      {/* ══ INFO / HOW TO PLAY PANEL ════════════════════════════════════════ */}
+      {infoOpen && <InfoModal tab={tab} onClose={() => setInfoOpen(false)} />}
     </>
   );
 }
