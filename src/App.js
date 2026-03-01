@@ -354,8 +354,8 @@ const css = `
   .bm-team:disabled { cursor:default; }
   .bm-team.sel   { background:rgba(201,168,76,0.1); color:var(--gold2); }
   .bm-team.ok    { background:rgba(34,197,94,0.1); color:var(--green); }
-  .bm-team.wrong { background:rgba(239,68,68,0.04); color:var(--text3); }
-  .bm-team.wrong .bm-logo { opacity:0.4; filter:grayscale(0.6); }
+  .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); }
+  .bm-team.wrong .bm-logo { opacity:0.5; filter:grayscale(0.35) saturate(0.6); }
   .bm-team.sel .bm-logo { filter:drop-shadow(0 0 5px rgba(240,198,90,0.5)); }
   .bm-team.ok  .bm-logo { filter:drop-shadow(0 0 5px rgba(34,197,94,0.4)); }
   .bm-logo { flex-shrink:0; transition:filter 0.15s, opacity 0.15s; }
@@ -365,7 +365,7 @@ const css = `
     color:var(--text3); opacity:0.7; flex-shrink:0; }
   .bm-team.sel .bm-seed { color:var(--gold2); opacity:1; }
   .bm-team.ok  .bm-seed { color:var(--green); opacity:1; }
-  .bm-team.wrong .bm-seed { opacity:0.25; }
+  .bm-team.wrong .bm-seed { color:rgba(239,68,68,0.55); opacity:1; }
 
   /* Games row */
   .bm-games { display:flex; align-items:center; gap:4px; padding:7px 10px; background:var(--surface3); }
@@ -375,8 +375,9 @@ const css = `
     font-family:'JetBrains Mono',monospace; padding:0; font-weight:500; }
   .bm-gbtn:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
   .bm-gbtn:disabled { cursor:default; }
-  .bm-gbtn.sel { background:rgba(201,168,76,0.12); border-color:var(--gold); color:var(--gold2); font-weight:600; }
-  .bm-gbtn.exact { background:rgba(34,197,94,0.15); border-color:var(--green); color:var(--green); }
+  .bm-gbtn.sel        { background:rgba(201,168,76,0.12); border-color:var(--gold); color:var(--gold2); font-weight:600; }
+  .bm-gbtn.exact      { background:rgba(34,197,94,0.15); border-color:var(--green); color:var(--green); }
+  .bm-gbtn.wrong-games{ background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.55); color:rgba(239,68,68,0.8); font-weight:600; }
   .bm-ps { font-size:0.52rem; margin-left:auto; font-family:'JetBrains Mono',monospace; }
   .bm-ps.ok { color:var(--cyan); }
   .bm-ps.pending { color:var(--text3); }
@@ -544,6 +545,14 @@ function AdminControl({ series, result, onAdminSet }) {
   );
 }
 
+// Returns just the team nickname (last word of the full name)
+// e.g. "Oklahoma City Thunder" → "Thunder", "New York Knicks" → "Knicks"
+function shortTeamName(fullName) {
+  if (!fullName) return "";
+  const parts = fullName.trim().split(" ");
+  return parts[parts.length - 1];
+}
+
 // ─── Bracket Matchup (compact card for bracket view) ─────────────────────
 
 function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals }) {
@@ -577,17 +586,23 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
 
   const gamesClass = (g) => {
     if (pick.games !== g) return "";
-    if (settled && pick.winner === result.winner && pick.games === result.games) return "exact";
-    return "sel";
+    if (!settled) return "sel";
+    // Winner correct + exact games = green
+    if (pick.winner === result.winner && pick.games === result.games) return "exact";
+    // Winner correct but games wrong = still gold (partial credit style)
+    if (pick.winner === result.winner) return "sel";
+    // Winner wrong = red games button
+    return "wrong-games";
   };
 
   const hasPick = pick.winner && pick.games;
+  const resultName = settled ? shortTeamName(result.winner) : "";
 
   return (
     <div className={`bm ${settled ? "done" : ""}`}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
-        {settled && <span className="bm-result">✓ in {result.games}</span>}
+        {settled && <span className="bm-result">✓ {resultName} in {result.games}</span>}
       </div>
       <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
         <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
@@ -1124,12 +1139,9 @@ export default function App() {
                   const rankClass = isMe ? "me" : i === 0 ? "r1" : i === 1 ? "r2" : i === 2 ? "r3" : "";
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
-                  // Shorten long team names for display (e.g. "Boston Celtics" → "Celtics")
-                  const shortName = (name) => {
-                    if (!name) return "—";
-                    const parts = name.split(" ");
-                    return parts.length >= 2 ? parts.slice(1).join(" ") : name;
-                  };
+                  // Shorten long team names to just the nickname (last word)
+                  // e.g. "Oklahoma City Thunder" → "Thunder", "New York Knicks" → "Knicks"
+                  const shortName = (name) => shortTeamName(name) || "—";
                   return (
                     <div
                       key={p.id}
