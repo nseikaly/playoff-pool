@@ -11,5 +11,15 @@ const firebaseConfig = {
   appId:             process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-const app = initializeApp(firebaseConfig);
-export const db = getDatabase(app);
+// Guard: if Firebase env vars are missing (e.g. local dev without .env),
+// skip initialization so the rest of the app can still render.
+let db;
+try {
+  if (!firebaseConfig.databaseURL) throw new Error("No Firebase databaseURL");
+  const app = initializeApp(firebaseConfig);
+  db = getDatabase(app);
+} catch (e) {
+  console.warn("Firebase not configured — running in offline/preview mode:", e.message);
+  db = null;
+}
+export { db };
