@@ -363,11 +363,11 @@ const css = `
   .bm-team.wrong .bm-seed { opacity:0.25; }
 
   /* Games row */
-  .bm-games { display:flex; align-items:center; gap:3px; padding:6px 10px; background:var(--surface3); }
+  .bm-games { display:flex; align-items:center; gap:4px; padding:7px 10px; background:var(--surface3); }
   .bm-gl { font-size:0.56rem; color:var(--text3); letter-spacing:0.8px; margin-right:3px; }
-  .bm-gbtn { width:30px; height:24px; background:var(--surface2); border:1px solid var(--border2); border-radius:3px;
-    color:var(--text2); font-size:0.7rem; cursor:pointer; transition:all 0.12s;
-    font-family:'JetBrains Mono',monospace; padding:0; }
+  .bm-gbtn { width:36px; height:28px; background:var(--surface2); border:1px solid var(--border2); border-radius:4px;
+    color:var(--text2); font-size:0.78rem; cursor:pointer; transition:all 0.12s;
+    font-family:'JetBrains Mono',monospace; padding:0; font-weight:500; }
   .bm-gbtn:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
   .bm-gbtn:disabled { cursor:default; }
   .bm-gbtn.sel { background:rgba(201,168,76,0.12); border-color:var(--gold); color:var(--gold2); font-weight:600; }
@@ -549,8 +549,20 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   const topSeed    = TEAM_SEEDS[series.top];
   const bottomSeed = TEAM_SEEDS[series.bottom];
 
-  const pickWinner = (team) => { if (!readOnly) onPick?.(series.id, { ...pick, winner: team }); };
-  const pickGames  = (g)    => { if (!readOnly) onPick?.(series.id, { ...pick, games: g }); };
+  const pickWinner = (team) => {
+    if (!readOnly) {
+      // clicking the already-selected team deselects it (and clears games)
+      const next = pick.winner === team ? { ...pick, winner: undefined, games: undefined } : { ...pick, winner: team };
+      onPick?.(series.id, next);
+    }
+  };
+  const pickGames = (g) => {
+    if (!readOnly) {
+      // clicking the already-selected games count deselects it
+      const next = pick.games === g ? { ...pick, games: undefined } : { ...pick, games: g };
+      onPick?.(series.id, next);
+    }
+  };
 
   const teamClass = (team) => {
     if (pick.winner !== team) return "";
@@ -593,192 +605,52 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   );
 }
 
-// ─── Bracket View (vertical, absolute-positioned) ────────────────────────────
+// ─── Bracket View (unified, absolute-positioned) ─────────────────────────────
 //
-// Strategy: compute exact pixel top position for every card in every round,
-// then render each round column as position:relative with cards at position:absolute.
-// This guarantees each later-round card is perfectly vertically centered between
-// the two source cards that feed it, no matter their heights.
-//
-// Card layout constants
-const CARD_W   = 224;  // card width px
-const CARD_H   = 118;  // card height px (header + 2 teams + games row)
-const CARD_GAP = 20;   // vertical gap between sibling cards in R1
-const COL_GAP  = 44;   // horizontal gap between round columns (connector space)
-const HDR_H    = 36;   // round header height px
+// Single absolute-positioned canvas.
+// East R1/R2/CF stacked on top, West R1/R2/CF below.
+// Finals column on the far right, vertically centered between East CF and West CF.
+// All connector lines drawn via SVG so they hit exactly the card vertical midpoints.
 
-// Given an array of top-positions for the source cards, compute the top position
-// for their parent card in the next round: centered between first and last source.
-function centerOf(tops) {
-  const first = tops[0];
-  const last  = tops[tops.length - 1];
-  return (first + last) / 2;
+const BK = {
+  CARD_W:   220,   // card width
+  CARD_H:   158,   // card height (hdr ~25 + team*2 ~88 + divider + games ~42 + borders)
+  CARD_GAP: 24,    // gap between sibling cards in same round
+  CONF_GAP: 44,    // vertical gap between East block and West block
+  COL_GAP:  36,    // horizontal space between card columns (connector zone)
+  HDR_H:    40,    // round header row height
+};
+
+// Returns top-px for n evenly-spaced cards starting at offsetY
+function r1Tops(n, offsetY = 0) {
+  return Array.from({length: n}, (_, i) => offsetY + i * (BK.CARD_H + BK.CARD_GAP));
 }
 
-// Build position maps for all rounds of one conference bracket.
-// Returns: [ { ids, tops, colX } ]  — one entry per round
-// tops[i] = top px of card i within the content area (below headers)
-function buildPositions(r1Ids) {
-  // Round 1: evenly spaced
-  const r1Tops = r1Ids.map((_, i) => i * (CARD_H + CARD_GAP));
-
-  // Round 2: each card centered between its two R1 sources (pairs)
-  const r2Count = r1Ids.length / 2;
-  const r2Tops  = Array.from({length: r2Count}, (_, i) => {
-    const src = [r1Tops[i * 2], r1Tops[i * 2 + 1]];
-    return centerOf(src);
-  });
-
-  // Round 3 (CF): centered between all R2 cards
-  const r3Tops = [centerOf(r2Tops)];
-
-  return [r1Tops, r2Tops, r3Tops];
+// Given an array of source card top-px values, return top-px for each parent card
+// (centered between each consecutive pair)
+function nextRoundTops(srcTops) {
+  const out = [];
+  for (let i = 0; i < srcTops.length; i += 2) {
+    const top1 = srcTops[i];
+    const top2 = srcTops[i + 1];
+    // center of the span from top of card1 to bottom of card2
+    out.push((top1 + top2 + BK.CARD_H) / 2 - BK.CARD_H / 2);
+  }
+  return out;
 }
 
-// Total pixel height needed for a conference bracket content area
-function bracketHeight(r1Count) {
-  return r1Count * CARD_H + (r1Count - 1) * CARD_GAP;
+// Card column X positions (left edge)
+function colX(colIdx) {
+  return colIdx * (BK.CARD_W + BK.COL_GAP);
 }
 
-// Renders one conference bracket (East or West) plus a connector line to Finals.
-// finalsTop: top px of the Finals card (relative to this bracket's content area).
-// showFinals: if true, render the Finals card in the last column.
-function ConferenceBracket({ confLabel, r1Ids, r2Ids, r3Id, finalsId,
-                              seriesMap, roundMap, picks, onPick, readOnly, results,
-                              showFinals }) {
-
-  const [r1Tops, r2Tops, r3Tops] = buildPositions(r1Ids);
-  const contentH = bracketHeight(r1Ids.length);
-
-  // For Finals: centered between R2 of both confs is handled by the parent.
-  // Here we just need to know where R3 (CF) is so we can draw the connector out.
-  const r3Top = r3Tops[0];
-
-  // Column X positions (left edge of each card column)
-  const colX = [
-    0,                          // R1
-    CARD_W + COL_GAP,           // R2
-    2 * (CARD_W + COL_GAP),     // CF
-    3 * (CARD_W + COL_GAP),     // Finals
-  ];
-  const totalW = showFinals ? colX[3] + CARD_W : colX[2] + CARD_W;
-
-  const ROUNDS = [
-    { label:"First Round",      pts:"10+5",   ids: r1Ids,  tops: r1Tops },
-    { label:"Semis",            pts:"20+5",   ids: r2Ids,  tops: r2Tops },
-    { label:"Conf Finals",      pts:"30+10",  ids: [r3Id], tops: r3Tops },
-  ];
-  if (showFinals) {
-    ROUNDS.push({ label:"🏆 NBA Finals", pts:"40+10", ids:[finalsId], tops:[r3Tops[0]] });
-  }
-
-  function renderCard(sid, topPx, colIdx) {
-    const series = seriesMap[sid];
-    if (!series) return null;
-    const round = roundMap[sid];
-    const resultRound = results?.rounds?.find(r => r.id === round?.id);
-    const si = round?.series.findIndex(s => s.id === sid);
-    const rs = resultRound?.series?.[si];
-    const merged = { ...series, winner: rs?.winner, games: rs?.games };
-    return (
-      <div key={sid} style={{position:'absolute', top: topPx, left: colX[colIdx], width: CARD_W}}>
-        <BracketMatchup
-          series={merged} round={round} picks={picks || {}}
-          onPick={onPick} readOnly={readOnly} results={results}
-          isFinals={sid === "s15"}
-        />
-      </div>
-    );
-  }
-
-  // Draw connector lines between two rounds.
-  // For each card in the destination round, draw:
-  //   - a horizontal line from the right edge of each source card to a vertical spine
-  //   - a vertical spine connecting top and bottom sources
-  //   - a horizontal line from spine midpoint to the destination card's left edge
-  function renderConnectors(srcTops, dstTops, srcColIdx) {
-    const lines = [];
-    const srcRight = colX[srcColIdx] + CARD_W;
-    const dstLeft  = colX[srcColIdx + 1];
-    const midX     = srcRight + COL_GAP / 2; // x of vertical spine
-
-    dstTops.forEach((dstTop, di) => {
-      const src1Top = srcTops[di * 2];
-      const src2Top = srcTops[di * 2 + 1];
-      const src1Mid = src1Top + CARD_H / 2;
-      const src2Mid = src2Top + CARD_H / 2;
-      const dstMid  = dstTop  + CARD_H / 2;
-      const key = `conn-${srcColIdx}-${di}`;
-
-      lines.push(
-        <g key={key}>
-          {/* Horizontal from src1 card right edge → spine */}
-          <line x1={srcRight} y1={src1Mid} x2={midX} y2={src1Mid} stroke="var(--border2)" strokeWidth="1"/>
-          {/* Horizontal from src2 card right edge → spine */}
-          <line x1={srcRight} y1={src2Mid} x2={midX} y2={src2Mid} stroke="var(--border2)" strokeWidth="1"/>
-          {/* Vertical spine connecting src1Mid to src2Mid */}
-          <line x1={midX} y1={src1Mid} x2={midX} y2={src2Mid} stroke="var(--border2)" strokeWidth="1"/>
-          {/* Horizontal from spine → dst card left edge */}
-          <line x1={midX} y1={dstMid} x2={dstLeft} y2={dstMid} stroke="var(--border2)" strokeWidth="1"/>
-        </g>
-      );
-    });
-    return lines;
-  }
-
-  // Connector from CF → Finals (just a horizontal line)
-  function renderFinalsConnector() {
-    if (!showFinals) return null;
-    const cfMid   = r3Tops[0] + CARD_H / 2;
-    const srcRight = colX[2] + CARD_W;
-    const dstLeft  = colX[3];
-    return (
-      <line x1={srcRight} y1={cfMid} x2={dstLeft} y2={cfMid}
-            stroke="var(--border2)" strokeWidth="1"/>
-    );
-  }
-
-  return (
-    <div style={{marginBottom: 40}}>
-      {/* Conference label */}
-      <div className="brk-conf-label">{confLabel}</div>
-
-      {/* Round headers row */}
-      <div style={{position:'relative', width: totalW, height: HDR_H, marginBottom: 8}}>
-        {ROUNDS.map((r, ci) => (
-          <div key={ci} style={{
-            position:'absolute', left: colX[ci], width: CARD_W,
-            textAlign:'center', height: HDR_H, display:'flex', flexDirection:'column',
-            alignItems:'center', justifyContent:'flex-end', paddingBottom: 4,
-          }}>
-            <div className="brk-round-hdr" style={{margin:0}}>{r.label}</div>
-            <span className="brk-hdr-pts">{r.pts}pts</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Bracket content area: cards + SVG connectors */}
-      <div style={{position:'relative', width: totalW, height: contentH}}>
-
-        {/* SVG layer for connector lines — sits behind cards */}
-        <svg style={{position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none'}}>
-          {renderConnectors(r1Tops, r2Tops, 0)}
-          {renderConnectors(r2Tops, r3Tops, 1)}
-          {renderFinalsConnector()}
-        </svg>
-
-        {/* Cards */}
-        {ROUNDS.map((r, ci) =>
-          r.ids.map((sid, i) => renderCard(sid, r.tops[i], ci))
-        )}
-      </div>
-    </div>
-  );
+// Horizontal center of the connector zone between colIdx and colIdx+1
+function spineX(colIdx) {
+  return colX(colIdx) + BK.CARD_W + BK.COL_GAP / 2;
 }
 
 function BracketView({ picks, onPick, readOnly, results }) {
   const resolvedRounds = resolveBracket(picks || {});
-
   const seriesMap = {};
   const roundMap  = {};
   resolvedRounds.forEach(round => {
@@ -788,28 +660,170 @@ function BracketView({ picks, onPick, readOnly, results }) {
     });
   });
 
-  const sharedProps = { seriesMap, roundMap, picks, onPick, readOnly, results };
+  // ── Position calculations ────────────────────────────────────────────────
+  const eastR1H   = 4 * BK.CARD_H + 3 * BK.CARD_GAP;
+  const westOffY  = eastR1H + BK.CONF_GAP;
+
+  // East
+  const eR1 = r1Tops(4, 0);
+  const eR2 = nextRoundTops(eR1);
+  const eCF = nextRoundTops(eR2);
+
+  // West
+  const wR1 = r1Tops(4, westOffY);
+  const wR2 = nextRoundTops(wR1);
+  const wCF = nextRoundTops(wR2);
+
+  // Finals: centered between East CF and West CF vertically
+  const eCFMid = eCF[0] + BK.CARD_H / 2;
+  const wCFMid = wCF[0] + BK.CARD_H / 2;
+  const finalsTop = (eCFMid + wCFMid) / 2 - BK.CARD_H / 2;
+
+  const totalH = westOffY + 4 * BK.CARD_H + 3 * BK.CARD_GAP;
+  const totalW = colX(3) + BK.CARD_W;   // 4 card columns: 0=R1, 1=R2, 2=CF, 3=Finals
+
+  // ── Card renderer ────────────────────────────────────────────────────────
+  function renderCard(sid, topPx, col) {
+    const series = seriesMap[sid];
+    if (!series) return null;
+    const round = roundMap[sid];
+    const resultRound = results?.rounds?.find(r => r.id === round?.id);
+    const si = round?.series?.findIndex(s => s.id === sid);
+    const rs = resultRound?.series?.[si];
+    const merged = { ...series, winner: rs?.winner ?? null, games: rs?.games ?? null };
+    return (
+      <div key={sid} style={{position:'absolute', top: topPx, left: colX(col), width: BK.CARD_W}}>
+        <BracketMatchup
+          series={merged} round={round} picks={picks || {}}
+          onPick={onPick} readOnly={readOnly} results={results}
+          isFinals={sid === "s15"}
+        />
+      </div>
+    );
+  }
+
+  // ── SVG connector between two rounds ─────────────────────────────────────
+  // srcTops: array of source card top-px
+  // dstTops: array of dest card top-px (one per pair of sources)
+  // srcCol: column index of source cards
+  function Connectors({ srcTops, dstTops, srcCol }) {
+    const sx   = colX(srcCol) + BK.CARD_W;   // right edge of src cards
+    const dx   = colX(srcCol + 1);            // left edge of dst cards
+    const midX = sx + BK.COL_GAP / 2;        // vertical spine x
+
+    return (
+      <>
+        {dstTops.map((dstTop, di) => {
+          const s1 = srcTops[di * 2]     + BK.CARD_H / 2;
+          const s2 = srcTops[di * 2 + 1] + BK.CARD_H / 2;
+          const dm = dstTop + BK.CARD_H / 2;
+          return (
+            <g key={di}>
+              <line x1={sx}   y1={s1}  x2={midX} y2={s1}  stroke="var(--border2)" strokeWidth="1" />
+              <line x1={sx}   y1={s2}  x2={midX} y2={s2}  stroke="var(--border2)" strokeWidth="1" />
+              <line x1={midX} y1={s1}  x2={midX} y2={s2}  stroke="var(--border2)" strokeWidth="1" />
+              <line x1={midX} y1={dm}  x2={dx}   y2={dm}  stroke="var(--border2)" strokeWidth="1" />
+            </g>
+          );
+        })}
+      </>
+    );
+  }
+
+  // Finals connectors: one line from each CF card to a shared spine, then to Finals
+  function FinalsConnectors() {
+    const sx    = colX(2) + BK.CARD_W;
+    const dx    = colX(3);
+    const midX  = sx + BK.COL_GAP / 2;
+    const eMid  = eCF[0]   + BK.CARD_H / 2;
+    const wMid  = wCF[0]   + BK.CARD_H / 2;
+    const fMid  = finalsTop + BK.CARD_H / 2;
+    return (
+      <g>
+        <line x1={sx}   y1={eMid} x2={midX} y2={eMid} stroke="var(--border2)" strokeWidth="1" />
+        <line x1={sx}   y1={wMid} x2={midX} y2={wMid} stroke="var(--border2)" strokeWidth="1" />
+        <line x1={midX} y1={eMid} x2={midX} y2={wMid} stroke="var(--border2)" strokeWidth="1" />
+        <line x1={midX} y1={fMid} x2={dx}   y2={fMid} stroke="var(--border2)" strokeWidth="1" />
+      </g>
+    );
+  }
+
+  // ── Round headers (above the bracket canvas) ─────────────────────────────
+  const headers = [
+    { col: 0, label: "First Round",   pts: "10+5" },
+    { col: 1, label: "Semis",         pts: "20+5" },
+    { col: 2, label: "Conf Finals",   pts: "30+10" },
+    { col: 3, label: "🏆 NBA Finals", pts: "40+10" },
+  ];
+
+  // ── Conference section labels (overlaid on left, at the right vertical position) ──
+  const eastLabelY  = eR1[0];
+  const westLabelY  = wR1[0];
 
   return (
-    <div style={{overflowX:'auto', paddingBottom:16}}>
-      <ConferenceBracket
-        confLabel="Eastern Conference"
-        r1Ids={["s1","s4","s2","s3"]}
-        r2Ids={["s9","s10"]}
-        r3Id="s13"
-        finalsId="s15"
-        showFinals={true}
-        {...sharedProps}
-      />
-      <ConferenceBracket
-        confLabel="Western Conference"
-        r1Ids={["s5","s8","s6","s7"]}
-        r2Ids={["s11","s12"]}
-        r3Id="s14"
-        finalsId={null}
-        showFinals={false}
-        {...sharedProps}
-      />
+    <div style={{overflowX:'auto', overflowY:'visible', paddingBottom: 24}}>
+      <div style={{position:'relative', minWidth: totalW}}>
+
+        {/* Round headers */}
+        <div style={{position:'relative', height: BK.HDR_H, marginBottom: 10}}>
+          {headers.map(h => (
+            <div key={h.col} style={{
+              position:'absolute', left: colX(h.col), width: BK.CARD_W,
+              height: BK.HDR_H, display:'flex', flexDirection:'column',
+              alignItems:'center', justifyContent:'flex-end', paddingBottom: 4,
+            }}>
+              <div className="brk-round-hdr">{h.label}</div>
+              <span className="brk-hdr-pts">{h.pts}pts</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Main bracket canvas */}
+        <div style={{position:'relative', width: totalW, height: totalH}}>
+
+          {/* Conference labels */}
+          <div style={{
+            position:'absolute', top: eastLabelY - 4, left: -2,
+            fontSize:'0.6rem', letterSpacing:'2.5px', fontWeight:700,
+            color:'rgba(123,159,245,0.6)', textTransform:'uppercase',
+            fontFamily:"'Bebas Neue',sans-serif", pointerEvents:'none',
+          }}>East</div>
+          <div style={{
+            position:'absolute', top: westLabelY - 4, left: -2,
+            fontSize:'0.6rem', letterSpacing:'2.5px', fontWeight:700,
+            color:'rgba(251,146,60,0.6)', textTransform:'uppercase',
+            fontFamily:"'Bebas Neue',sans-serif", pointerEvents:'none',
+          }}>West</div>
+
+          {/* SVG connector lines (drawn behind cards) */}
+          <svg style={{position:'absolute', top:0, left:0, width:'100%', height:'100%',
+                       overflow:'visible', pointerEvents:'none'}}>
+            <Connectors srcTops={eR1} dstTops={eR2} srcCol={0} />
+            <Connectors srcTops={eR2} dstTops={eCF} srcCol={1} />
+            <Connectors srcTops={wR1} dstTops={wR2} srcCol={0} />
+            <Connectors srcTops={wR2} dstTops={wCF} srcCol={1} />
+            <FinalsConnectors />
+          </svg>
+
+          {/* East R1 */}
+          {["s1","s4","s2","s3"].map((sid, i) => renderCard(sid, eR1[i], 0))}
+          {/* East R2 */}
+          {["s9","s10"].map((sid, i) => renderCard(sid, eR2[i], 1))}
+          {/* East CF */}
+          {renderCard("s13", eCF[0], 2)}
+
+          {/* West R1 */}
+          {["s5","s8","s6","s7"].map((sid, i) => renderCard(sid, wR1[i], 0))}
+          {/* West R2 */}
+          {["s11","s12"].map((sid, i) => renderCard(sid, wR2[i], 1))}
+          {/* West CF */}
+          {renderCard("s14", wCF[0], 2)}
+
+          {/* Finals */}
+          {renderCard("s15", finalsTop, 3)}
+
+        </div>
+      </div>
     </div>
   );
 }
