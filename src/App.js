@@ -618,7 +618,7 @@ const BK = {
   CARD_GAP:      24,  // vertical gap between sibling cards in same column
   CONF_GAP:      44,  // vertical gap between East and West conference blocks
   CONF_LABEL_H:  22,  // height reserved above each conference R1 block for "EAST"/"WEST" label
-  COL_GAP:       32,  // horizontal connector zone width between card columns
+  COL_GAP:       24,  // horizontal connector zone width between card columns
   HDR_H:         40,  // round header row height above bracket
 };
 
@@ -752,10 +752,13 @@ function BracketView({ picks, onPick, readOnly, results }) {
   }
 
   // ── Conference divider label ──────────────────────────────────────────────
+  // Width is capped to the right edge of the CF column (col 2) so the
+  // horizontal rule never bleeds under or behind the Finals column.
   function ConfLabel({ label, topY, color }) {
+    const labelW = cx(2) + CARD_W;  // right edge of CF column
     return (
       <div style={{
-        position:'absolute', top: topY, left: 0, right: 0,
+        position:'absolute', top: topY, left: 0, width: labelW,
         display:'flex', alignItems:'center', gap:10, pointerEvents:'none',
         height: CL,
       }}>
@@ -772,7 +775,7 @@ function BracketView({ picks, onPick, readOnly, results }) {
   // ── Round column headers ──────────────────────────────────────────────────
   const headers = [
     { col:0, label:"First Round",   pts:"10+5"  },
-    { col:1, label:"Semis",         pts:"20+5"  },
+    { col:1, label:"Conf Semis",     pts:"20+5"  },
     { col:2, label:"Conf Finals",   pts:"30+10" },
     { col:3, label:"🏆 NBA Finals", pts:"40+10" },
   ];
@@ -1035,12 +1038,16 @@ export default function App() {
         {tab === "picks" && (
           <div>
             <div className="legend">
-              <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
-              <span>Semis: Winner <strong>20pts</strong> + Games <strong>5pts</strong></span>
-              <span>Conf Finals: Winner <strong>30pts</strong> + Games <strong>10pts</strong></span>
-              <span>Finals: Winner <strong>40pts</strong> + Games <strong>10pts</strong></span>
-              <span className="text-xs text-muted">(Games points only awarded if winner is correct)</span>
-              <span>Max possible: <strong>{MAX_POINTS}pts</strong></span>
+              <div style={{display:'flex', gap:20, flexWrap:'wrap', width:'100%'}}>
+                <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
+                <span>Conf Semis: Winner <strong>20pts</strong> + Games <strong>5pts</strong></span>
+                <span>Conf Finals: Winner <strong>30pts</strong> + Games <strong>10pts</strong></span>
+                <span>Finals: Winner <strong>40pts</strong> + Games <strong>10pts</strong></span>
+              </div>
+              <div style={{display:'flex', gap:24, flexWrap:'wrap', width:'100%', marginTop:6, paddingTop:6, borderTop:'1px solid var(--border)'}}>
+                <span>Max possible: <strong>{MAX_POINTS}pts</strong></span>
+                <span style={{color:'var(--text3)', fontSize:'0.72rem'}}>Games pts only awarded if winner is correct</span>
+              </div>
             </div>
 
             {picksLocked && (
