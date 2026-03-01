@@ -340,10 +340,12 @@ const css = `
   .bm-hdr { display:flex; align-items:center; justify-content:space-between; padding:5px 10px;
     background:var(--surface3); border-bottom:1px solid var(--border); }
 
-  /* Ghost pick — shows eliminated pick inline within the matchup card (between teams & games) */
-  .bm-ghost-row { display:flex; align-items:center; gap:6px; padding:5px 10px;
-    background:rgba(239,68,68,0.04); border-top:1px solid rgba(239,68,68,0.12);
-    border-bottom:1px solid var(--border); }
+  /* Ghost picks — eliminated upstream picks shown in the NEXT matchup card */
+  /* topGhost appears ABOVE the top team button; bottomGhost BELOW the bottom team, above games */
+  .bm-ghost-top { display:flex; align-items:center; gap:6px; padding:4px 10px;
+    background:rgba(239,68,68,0.04); border-bottom:1px solid rgba(239,68,68,0.12); }
+  .bm-ghost-bottom { display:flex; align-items:center; gap:6px; padding:4px 10px;
+    background:rgba(239,68,68,0.04); border-top:1px solid rgba(239,68,68,0.12); }
   .bm-ghost-name { font-size:0.62rem; color:rgba(239,68,68,0.7); text-decoration:line-through;
     font-weight:600; font-family:'JetBrains Mono',monospace; line-height:1.2; }
   .bm-ghost-arrow { font-size:0.52rem; color:var(--text3); letter-spacing:0.2px; white-space:nowrap; }
@@ -646,7 +648,7 @@ function shortTeamName(fullName) {
 
 // ─── Bracket Matchup (compact card for bracket view) ─────────────────────
 
-function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams, ghostPick }) {
+function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams, topGhost, bottomGhost }) {
   const pick   = picks?.[series.id] || {};
   const result = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
@@ -717,6 +719,13 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
           </span>
         )}
       </div>
+      {topGhost && (
+        <div className="bm-ghost-top" title={`Your pick for this slot: ${topGhost} (eliminated)`}>
+          <TeamLogo name={topGhost} size={13} state="wrong" />
+          <span className="bm-ghost-name">{shortTeamName(topGhost)}</span>
+          <span className="bm-ghost-arrow">← your pick (eliminated)</span>
+        </div>
+      )}
       <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
         <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
         <span className="bm-name">{series.top}</span>
@@ -727,10 +736,10 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
         <span className="bm-name">{series.bottom}</span>
         {bottomSeed != null && <span className="bm-seed">#{bottomSeed}</span>}
       </button>
-      {ghostPick && (
-        <div className="bm-ghost-row" title={`Your original pick for this round: ${ghostPick}`}>
-          <TeamLogo name={ghostPick} size={13} state="wrong" />
-          <span className="bm-ghost-name">{shortTeamName(ghostPick)}</span>
+      {bottomGhost && (
+        <div className="bm-ghost-bottom" title={`Your pick for this slot: ${bottomGhost} (eliminated)`}>
+          <TeamLogo name={bottomGhost} size={13} state="wrong" />
+          <span className="bm-ghost-name">{shortTeamName(bottomGhost)}</span>
           <span className="bm-ghost-arrow">← your pick (eliminated)</span>
         </div>
       )}
@@ -848,27 +857,49 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
 
     if (scenarioMode) {
       const isSettled = rs?.winner != null;
-      const myPick = myPicksForScenario?.[sid] || {};
       const scenarioPick = picks?.[sid] || {};
-      // Ghost pick: participant's original pick is no longer one of the teams in this matchup
-      // (e.g. their picked team was eliminated in an earlier round and admin set the actual winner)
-      const ghostPick = (!isSettled && myPick?.winner &&
-        myPick.winner !== merged.top && myPick.winner !== merged.bottom)
-        ? myPick.winner : null;
-      // Settled series: show participant's myPick vs actual result (read-only, like My Picks tab)
-      // Unsettled series: show scenario pick (interactive, blank by default)
-      const effectivePick = isSettled ? myPick : scenarioPick;
+
+      // ── Ghost picks (only for unsettled series) ────────────────────────────
+      // For each upstream series that feeds into this matchup's top/bottom slot,
+      // check if the participant's upstream pick ≠ admin's actual upstream result.
+      // If so, show that team as a ghost in THIS card — above top slot or below
+      // bottom slot — to remind the participant their original pick was eliminated.
+      let topGhost = null, bottomGhost = null;
+      if (!isSettled && FEEDS_FROM[sid]) {
+        const feed = FEEDS_FROM[sid];
+        // Top slot: did participant's upstream pick get eliminated?
+        const topAdminResult = getAdminResultForSeries(results, feed.top);
+        if (topAdminResult?.winner) {
+          const myTopPick = myPicksForScenario?.[feed.top]?.winner;
+          if (myTopPick && myTopPick !== topAdminResult.winner) topGhost = myTopPick;
+        }
+        // Bottom slot: same logic
+        const bottomAdminResult = getAdminResultForSeries(results, feed.bottom);
+        if (bottomAdminResult?.winner) {
+          const myBottomPick = myPicksForScenario?.[feed.bottom]?.winner;
+          if (myBottomPick && myBottomPick !== bottomAdminResult.winner) bottomGhost = myBottomPick;
+        }
+      }
+
+      // Settled series: pass full myPicksForScenario so BracketMatchup can look up
+      // `picks[sid]` and correctly compare it against the admin result (green/red/teal).
+      // Unsettled series: pass only the scenario pick for this slot.
+      const picksForCard = isSettled
+        ? (myPicksForScenario || {})
+        : { [sid]: scenarioPick };
+
       return (
         <div key={sid} style={{position:'absolute', top: topPx, left: cx(col), width: CARD_W}}>
           <BracketMatchup
             series={merged} round={round}
-            picks={{ [sid]: effectivePick }}
+            picks={picksForCard}
             onPick={isSettled ? undefined : onScenarioPick}
             readOnly={isSettled}
             results={results}
             isFinals={sid === "s15"}
             eliminatedTeams={eliminatedTeams}
-            ghostPick={ghostPick}
+            topGhost={topGhost}
+            bottomGhost={bottomGhost}
           />
         </div>
       );
@@ -1065,6 +1096,20 @@ function resolveForScenario(myPicks, scenarioPicks, results) {
     });
   });
   return combined;
+}
+
+// ─── Admin Result Lookup ──────────────────────────────────────────────────────
+// Safely finds an admin-set result for a given series ID, handling both array
+// and object Firebase data shapes.  Returns the series object (with .winner /
+// .games) if found, otherwise null.
+function getAdminResultForSeries(results, sid) {
+  for (const round of (results?.rounds || [])) {
+    const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
+    for (const s of arr) {
+      if (s?.id === sid && s?.winner) return s;
+    }
+  }
+  return null;
 }
 
 // ─── Info Modal ───────────────────────────────────────────────────────────────
@@ -1717,7 +1762,11 @@ export default function App() {
                         readOnly={false}
                         results={results}
                         scenarioMode={true}
-                        myPicksForScenario={myPicks}
+                        myPicksForScenario={
+                          Object.keys(myPicks).length > 0
+                            ? myPicks
+                            : (participants[myKey]?.picks || {})
+                        }
                         onScenarioPick={handleScenarioPick}
                       />
                     </div>
