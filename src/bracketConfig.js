@@ -5,7 +5,7 @@
 
 export const BRACKET_CONFIG = {
   sport:  "NBA",
-  season: "2025 Playoffs",
+  season: "2026 NBA Playoffs",
 
   rounds: [
     {
