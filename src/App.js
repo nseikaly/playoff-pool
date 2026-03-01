@@ -566,7 +566,8 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
 
   const hasPick = pick.winner && pick.games;
 
-
+  return (
+    <div className={`bm ${settled ? "done" : ""}`}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
         {settled && <span className="bm-result">✓ in {result.games}</span>}
