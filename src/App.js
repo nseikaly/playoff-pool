@@ -58,7 +58,7 @@ const css = `
   /* Series card */
   .sc { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:13px 15px; transition:border-color 0.2s; }
   .sc:hover { border-color:var(--border2); }
-  .sc.done { border-left:2px solid var(--green); }
+  .sc.done { /* left border color set via inline style per conference */ }
   .sc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
   .conf { font-size:0.6rem; letter-spacing:2px; padding:2px 7px; border-radius:2px; font-weight:700; text-transform:uppercase; }
   .conf-East  { background:rgba(59,91,219,0.15); color:#7b9ff5; border:1px solid rgba(59,91,219,0.3); }
@@ -337,10 +337,17 @@ const css = `
   .bm { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px;
     overflow:hidden; transition:border-color 0.2s; flex-shrink:0; }
   .bm:hover { border-color:var(--border2); }
-  .bm.done { border-left:2px solid var(--green); }
+  .bm.done { /* left border color set via inline style per conference */ }
 
   .bm-hdr { display:flex; align-items:center; justify-content:space-between; padding:5px 10px;
     background:var(--surface3); border-bottom:1px solid var(--border); }
+
+  /* Ghost pick label — shows participant's original pick when displaced by admin results */
+  .bm-ghost-wrap { display:flex; align-items:center; gap:3px; }
+  .bm-ghost-pick { font-size:0.56rem; font-family:'JetBrains Mono',monospace;
+    color:rgba(239,68,68,0.8); text-decoration:line-through; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; max-width:70px; line-height:1.2; }
+  .bm-ghost-lbl { font-size:0.5rem; color:var(--text3); letter-spacing:0.2px; white-space:nowrap; }
   .bm-conf { font-size:0.55rem; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; }
   .bm-conf.East { color:#7b9ff5; }
   .bm-conf.West { color:#fb923c; }
@@ -487,6 +494,12 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
   const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
 
+  const confBorderColor = series.conference === 'East'
+    ? '#7b9ff5'
+    : series.conference === 'West'
+    ? '#fb923c'
+    : 'var(--gold2)';
+
   const teamClass = (team) => {
     if (adminMode) return "";
     if (pick.winner !== team) return "";
@@ -504,7 +517,7 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const hasPick = pick.winner && pick.games;
 
   return (
-    <div className={`sc ${settled ? "done" : ""}`}>
+    <div className={`sc ${settled ? "done" : ""}`} style={settled ? {borderLeft:`3px solid ${confBorderColor}`} : {}}>
       <div className="sc-top">
         <div style={{display:"flex", alignItems:"center", gap:"7px"}}>
           <span className={`conf conf-${series.conference}`}>{series.conference}</span>
@@ -584,7 +597,7 @@ function shortTeamName(fullName) {
 
 // ─── Bracket Matchup (compact card for bracket view) ─────────────────────
 
-function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams }) {
+function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFinals, eliminatedTeams, ghostPick }) {
   const pick   = picks?.[series.id] || {};
   const result = results?.rounds?.flatMap(r => r.series)?.find(s => s.id === series.id);
   const settled = result?.winner != null;
@@ -608,13 +621,12 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   };
 
   const teamClass = (team) => {
+    // Eliminated teams ALWAYS show wrong (red + strikethrough), regardless of settled state
+    if (eliminatedTeams?.has(team)) return "wrong";
     if (settled) {
-      // Only the picked team gets ok/wrong in settled series
       if (pick.winner !== team) return "";
       return pick.winner === result.winner ? "ok" : "wrong";
     }
-    // Not settled — show red for ANY eliminated team (whether picked or not)
-    if (eliminatedTeams?.has(team)) return "wrong";
     if (pick.winner === team) return "sel";
     return "";
   };
@@ -634,12 +646,29 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
 
   const hasPick = pick.winner && pick.games;
   const resultName = settled ? shortTeamName(result.winner) : "";
+  const confBorderColor = series.conference === 'East'
+    ? '#7b9ff5'
+    : series.conference === 'West'
+    ? '#fb923c'
+    : 'var(--gold2)';
 
   return (
-    <div className={`bm ${settled ? "done" : ""}`}>
+    <div className={`bm ${settled ? "done" : ""}`} style={settled ? {borderLeft:`3px solid ${confBorderColor}`} : {}}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
-        {settled && <span className="bm-result" style={{color: series.conference === 'East' ? '#7b9ff5' : series.conference === 'West' ? '#fb923c' : 'var(--gold2)'}}>✓ {resultName} in {result.games}</span>}
+        <div style={{display:'flex', alignItems:'center', gap:5}}>
+          {ghostPick && (
+            <span className="bm-ghost-wrap" title={`Your original pick: ${ghostPick}`}>
+              <span className="bm-ghost-pick">{shortTeamName(ghostPick)}</span>
+              <span className="bm-ghost-lbl">← your pick</span>
+            </span>
+          )}
+          {settled && (
+            <span className="bm-result" style={{color: confBorderColor}}>
+              ✓ {resultName} in {result.games}
+            </span>
+          )}
+        </div>
       </div>
       <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
         <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
@@ -688,7 +717,7 @@ function nextRoundTops(srcTops, cardH) {
   return out;
 }
 
-function BracketView({ picks, onPick, readOnly, results }) {
+function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksForScenario, onScenarioPick }) {
   // Measure the container width so cards stretch to fill it
   const containerRef = useRef(null);
   const [containerW, setContainerW] = useState(900);
@@ -739,7 +768,11 @@ function BracketView({ picks, onPick, readOnly, results }) {
   const totalW = cx(3) + CARD_W;
 
   // ── Series/round lookup ───────────────────────────────────────────────────
-  const resolvedRounds = resolveBracket(picks || {});
+  // In scenario mode, resolve team names using: admin results > scenario picks > my picks
+  const resolveSource = scenarioMode
+    ? resolveForScenario(myPicksForScenario || {}, picks || {}, results)
+    : (picks || {});
+  const resolvedRounds = resolveBracket(resolveSource);
   const seriesMap = {}, roundMap = {};
   resolvedRounds.forEach(round => round.series.forEach(s => {
     seriesMap[s.id] = s;
@@ -758,6 +791,35 @@ function BracketView({ picks, onPick, readOnly, results }) {
     const si = round?.series?.findIndex(s => s.id === sid);
     const rs = resultRound?.series?.[si];
     const merged = { ...series, winner: rs?.winner ?? null, games: rs?.games ?? null };
+
+    if (scenarioMode) {
+      const isSettled = rs?.winner != null;
+      const myPick = myPicksForScenario?.[sid] || {};
+      const scenarioPick = picks?.[sid] || {};
+      // Ghost pick: participant's original pick is no longer one of the teams in this matchup
+      // (e.g. their picked team was eliminated in an earlier round and admin set the actual winner)
+      const ghostPick = (!isSettled && myPick?.winner &&
+        myPick.winner !== merged.top && myPick.winner !== merged.bottom)
+        ? myPick.winner : null;
+      // Settled series: show participant's myPick vs actual result (read-only, like My Picks tab)
+      // Unsettled series: show scenario pick (interactive, blank by default)
+      const effectivePick = isSettled ? myPick : scenarioPick;
+      return (
+        <div key={sid} style={{position:'absolute', top: topPx, left: cx(col), width: CARD_W}}>
+          <BracketMatchup
+            series={merged} round={round}
+            picks={{ [sid]: effectivePick }}
+            onPick={isSettled ? undefined : onScenarioPick}
+            readOnly={isSettled}
+            results={results}
+            isFinals={sid === "s15"}
+            eliminatedTeams={eliminatedTeams}
+            ghostPick={ghostPick}
+          />
+        </div>
+      );
+    }
+
     return (
       <div key={sid} style={{position:'absolute', top: topPx, left: cx(col), width: CARD_W}}>
         <BracketMatchup
@@ -921,6 +983,33 @@ function buildScenarioResults(actualResults, scenarioPicks) {
       }),
     })),
   };
+}
+
+// ─── Scenario Resolution ──────────────────────────────────────────────────────
+// Builds a "picks-like" object that determines which team names appear in each
+// bracket slot for the scenario view.
+// Priority order: admin results > scenario picks > participant's my picks.
+// Used by BracketView (via resolveBracket) in scenario mode.
+function resolveForScenario(myPicks, scenarioPicks, results) {
+  const adminWinners = {};
+  (results?.rounds || []).forEach(round => {
+    const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
+    arr.forEach(s => { if (s?.id && s?.winner) adminWinners[s.id] = s.winner; });
+  });
+  const combined = {};
+  BRACKET_CONFIG.rounds.forEach(round => {
+    round.series.forEach(series => {
+      const sid = series.id;
+      if (adminWinners[sid]) {
+        combined[sid] = { winner: adminWinners[sid] };
+      } else if (scenarioPicks[sid]?.winner) {
+        combined[sid] = scenarioPicks[sid];
+      } else if (myPicks[sid]?.winner) {
+        combined[sid] = { winner: myPicks[sid].winner };
+      }
+    });
+  });
+  return combined;
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
@@ -1129,6 +1218,7 @@ export default function App() {
   const leaderboard = buildLeaderboard(participants, results);
   const topPts      = leaderboard[0]?.points || 1;
   const myKey       = sanitize(myName);
+  const eliminatedTeams = getEliminatedTeams(results);
 
   // ── Pool stats ──
   const completedCount = (results?.rounds || []).flatMap(r => r.series).filter(s => s.winner).length;
@@ -1309,10 +1399,20 @@ export default function App() {
                         <div className="lbr-finals">
                           <div className="lbr-finals-lbl">🏆 Finals Pick</div>
                           {finalsWinner
-                            ? <>
-                                <TeamLogo name={finalsWinner} size={28} state="" />
-                                <div className="lbr-finals-team">{shortName(finalsWinner)}</div>
-                              </>
+                            ? (() => {
+                                const finalsEliminated = eliminatedTeams.has(finalsWinner);
+                                return (
+                                  <>
+                                    <TeamLogo name={finalsWinner} size={28} state={finalsEliminated ? "wrong" : ""} />
+                                    <div className="lbr-finals-team" style={{
+                                      color: finalsEliminated ? 'var(--red)' : 'var(--gold2)',
+                                      textDecoration: finalsEliminated ? 'line-through' : 'none'
+                                    }}>
+                                      {shortName(finalsWinner)}
+                                    </div>
+                                  </>
+                                );
+                              })()
                             : <div className="lbr-finals-team" style={{color:'var(--text3)'}}>—</div>
                           }
                         </div>
@@ -1391,6 +1491,9 @@ export default function App() {
                         onPick={handleScenarioPick}
                         readOnly={false}
                         results={results}
+                        scenarioMode={true}
+                        myPicksForScenario={myPicks}
+                        onScenarioPick={handleScenarioPick}
                       />
                     </div>
                   </div>
