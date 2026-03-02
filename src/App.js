@@ -1805,37 +1805,8 @@ export default function App() {
         <div className="hdr">
           <div>
             <div className="hdr-title" style={{display:'flex',alignItems:'center'}}>
-              <svg viewBox="0 0 200 200" style={{width:'2.2rem',height:'2.2rem',marginRight:'16px',flexShrink:0}} aria-hidden="true">
-                <defs>
-                  <radialGradient id="bb-fill" cx="36%" cy="28%" r="75%">
-                    <stop offset="0%"   stopColor="#FFB84D"/>
-                    <stop offset="28%"  stopColor="#F07A16"/>
-                    <stop offset="68%"  stopColor="#C05010"/>
-                    <stop offset="100%" stopColor="#6E2400"/>
-                  </radialGradient>
-                  <radialGradient id="bb-edge" cx="50%" cy="50%" r="50%">
-                    <stop offset="60%"  stopColor="rgba(0,0,0,0)"/>
-                    <stop offset="100%" stopColor="rgba(0,0,0,0.65)"/>
-                  </radialGradient>
-                  <clipPath id="bb-clip"><circle cx="100" cy="100" r="93"/></clipPath>
-                </defs>
-                {/* Sphere */}
-                <circle cx="100" cy="100" r="93" fill="url(#bb-fill)"/>
-                <g clipPath="url(#bb-clip)" fill="none" stroke="#1A0600" strokeLinecap="round">
-                  {/* Horizontal S-seam: dips up in left half, down in right half */}
-                  <path strokeWidth="5.5" d="M7,100 C40,82 60,82 100,100 C140,118 160,118 193,100"/>
-                  {/* Vertical S-seam: curves right in top half, left in bottom half */}
-                  <path strokeWidth="5.5" d="M100,7 C118,40 118,60 100,100 C82,140 82,160 100,193"/>
-                  {/* Left panel arc — bows outward (left) */}
-                  <path strokeWidth="4.5" d="M48,8 C14,55 14,145 48,192"/>
-                  {/* Right panel arc — bows outward (right) */}
-                  <path strokeWidth="4.5" d="M152,8 C186,55 186,145 152,192"/>
-                </g>
-                {/* Edge shadow for depth */}
-                <circle cx="100" cy="100" r="93" fill="url(#bb-edge)"/>
-                {/* Specular highlight */}
-                <ellipse cx="63" cy="47" rx="26" ry="16" fill="rgba(255,255,255,0.22)" transform="rotate(-28,63,47)"/>
-              </svg>
+              <img src="/basketball.png" alt="" aria-hidden="true"
+                style={{width:'2.4rem',height:'2.4rem',marginRight:'16px',flexShrink:0,objectFit:'contain'}} />
               <span>{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</span>
             </div>
             <div className="hdr-sub">2026 NBA Playoffs · Built & Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
