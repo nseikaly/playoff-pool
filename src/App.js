@@ -44,8 +44,8 @@ const css = `
   /* Entry toggle (dual-entry pick switcher) */
   .entry-toggle { display:flex; gap:0; margin-bottom:18px; border:1px solid var(--border);
     border-radius:8px; overflow:hidden; width:fit-content; }
-  .entry-btn { padding:8px 22px; background:transparent; border:none; cursor:pointer;
-    color:var(--text2); font-size:0.72rem; font-weight:700; letter-spacing:0.8px;
+  .entry-btn { padding:11px 34px; background:transparent; border:none; cursor:pointer;
+    color:var(--text2); font-size:0.82rem; font-weight:700; letter-spacing:1px;
     font-family:'Bebas Neue',sans-serif; transition:all 0.15s; white-space:nowrap; }
   .entry-btn:not(:last-child) { border-right:1px solid var(--border); }
   .entry-btn.active { background:var(--gold); color:#111; }
@@ -561,11 +561,7 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const pickWinner = (team) => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, winner: team }); };
   const pickGames  = (g)    => { if (!readOnly && !adminMode) onPick(series.id, { ...pick, games: g }); };
 
-  const confBorderColor = series.conference === 'East'
-    ? '#7b9ff5'
-    : series.conference === 'West'
-    ? '#fb923c'
-    : 'var(--gold2)';
+  const confBorderColor = '#7d9ab0';  // muted blue-gray — consistent for all conferences
 
   const teamClass = (team) => {
     if (adminMode) return "";
@@ -719,15 +715,11 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
 
   const hasPick = pick.winner && pick.games;
   const resultName = settled ? shortTeamName(result.winner) : "";
-  const confBorderColor = series.conference === 'East'
-    ? '#7b9ff5'
-    : series.conference === 'West'
-    ? '#fb923c'
-    : 'var(--gold2)';
+  const confBorderColor = '#7d9ab0';  // muted blue-gray — consistent for all conferences
 
   return (
     <div className={`bm ${settled ? "done" : ""}`} style={settled ? {border:`2px solid ${confBorderColor}`, boxShadow:`0 0 10px ${confBorderColor}33`} : {}}>
-      <div className="bm-hdr">
+      <div className="bm-hdr" style={settled ? {background:'rgba(125,154,176,0.14)'} : {}}>
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
         {settled && (
           <span className="bm-result" style={{color: confBorderColor}}>
@@ -759,7 +751,7 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
           <span className="bm-ghost-arrow">← your pick (eliminated)</span>
         </div>
       )}
-      <div className="bm-games">
+      <div className="bm-games" style={settled ? {background:'rgba(125,154,176,0.10)'} : {}}>
         <span className="bm-gl">G</span>
         {GAME_OPTIONS.map(g => (
           <button key={g} className={`bm-gbtn ${gamesClass(g)}`} onClick={() => pickGames(g)} disabled={readOnly}>{g}</button>
@@ -1154,6 +1146,15 @@ function InfoModal({ tab, onClose }) {
           ]
         },
         {
+          title: "Two Entries Per Person",
+          items: [
+            { dot:"var(--gold)",  text: <>You may submit <strong>up to 2 entries</strong> — a second entry is completely optional. One entry is perfectly fine!</> },
+            { dot:"var(--cyan)",  text: <>Use the <strong>Entry 1 / Entry 2 toggle</strong> (below the scoring banner) to switch between your two sets of picks. Each entry is scored independently on the leaderboard.</> },
+            { dot:"var(--green)", text: <>To submit Entry 2: switch to the Entry 2 tab, make all 15 picks, then click <strong>Submit Entry 2</strong>. You can use a <strong>different name</strong> for Entry 2 if you'd like.</> },
+            { dot:"var(--text3)", text: <>After submitting Entry 1, the app automatically switches you to Entry 2 to make it easy to fill out a second bracket. Both entries appear on the Leaderboard highlighted in silver — Entry 2 shows as <strong>Your Name (2)</strong> unless you gave it a custom name.</> },
+          ]
+        },
+        {
           title: "Scoring System",
           items: [
             { dot:"var(--text3)", text: <><span style={{color:'var(--gold)',fontWeight:700}}>10 pts</span> — Round 1 winner correct &nbsp;·&nbsp; <span style={{color:'var(--gold)',fontWeight:700}}>+5 pts</span> if exact games</> },
@@ -1303,6 +1304,7 @@ export default function App() {
   const [myPicks2,  setMyPicks2]  = useState({});       // Entry 2 picks (local edit)
   const [activeEntry, setActiveEntry] = useState(1);   // 1 or 2 — which entry the user is editing
   const [myName,    setMyName]    = useState(() => localStorage.getItem("pool_name") || "");
+  const [myName2,   setMyName2]   = useState(() => localStorage.getItem("pool_name_2") || "");
   const [myEmail,   setMyEmail]   = useState("");
   const [submitted, setSubmitted] = useState(() => localStorage.getItem("pool_submitted") === "1");
   const [submitted2, setSubmitted2] = useState(() => localStorage.getItem("pool_submitted_2") === "1");
@@ -1313,7 +1315,8 @@ export default function App() {
   const [adminPass,    setAdminPass]    = useState("");
   const [picksLocked,  setPicksLocked]  = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
-  const [scenarioPicks, setScenarioPicks] = useState({});  // local session-only scenario picks
+  const [scenarioPicks,  setScenarioPicks]  = useState({});  // local session-only scenario picks
+  const [scenarioEntry,  setScenarioEntry]  = useState(1);   // 1 or 2 — which entry to compare in Scenario
   const [infoOpen,      setInfoOpen]      = useState(false); // info/how-to-play panel
   const toastTimer = useRef(null);
 
@@ -1409,21 +1412,26 @@ export default function App() {
           // Preserve entry 2 data if it already exists
           ...(participants[key]?.picks2        ? { picks2:        participants[key].picks2        } : {}),
           ...(participants[key]?.submittedAt2  ? { submittedAt2:  participants[key].submittedAt2  } : {}),
+          ...(participants[key]?.name2         ? { name2:         participants[key].name2         } : {}),
         });
         localStorage.setItem("pool_name",      myName.trim());
         localStorage.setItem("pool_submitted", "1");
         setSubmitted(true);
+        // Stay on My Picks tab but switch to Entry 2 so user can fill it out
+        setActiveEntry(2);
       } else {
         // Entry 2: use update() so we never overwrite entry 1 picks
+        const name2Value = myName2.trim() || myName.trim();
         await update(ref(db), {
           [`participants/${key}/picks2`]:       myPicks2,
           [`participants/${key}/submittedAt2`]: Date.now(),
+          [`participants/${key}/name2`]:        name2Value,
         });
         localStorage.setItem("pool_submitted_2", "1");
+        localStorage.setItem("pool_name_2",      name2Value);
         setSubmitted2(true);
       }
-      showToast(activeEntry === 1 ? "🏆 Entry 1 submitted!" : "🏆 Entry 2 submitted!");
-      setTab("leaderboard");
+      showToast(activeEntry === 1 ? "🏆 Entry 1 submitted! Now fill out Entry 2 below." : "🏆 Entry 2 submitted!");
     } catch (e) {
       showToast("Error saving — check Firebase config");
       console.error(e);
@@ -1476,8 +1484,10 @@ export default function App() {
   };
   const handleScenarioAutoFill = () => {
     const eliminated = getEliminatedTeams(results);
+    // Use whichever entry is selected in the scenario toggle
+    const srcPicks = scenarioEntry === 1 ? myPicks : myPicks2;
     const filled = {};
-    Object.entries(myPicks).forEach(([sid, pick]) => {
+    Object.entries(srcPicks).forEach(([sid, pick]) => {
       if (pick?.winner && !eliminated.has(pick.winner)) filled[sid] = pick;
     });
     setScenarioPicks(filled);
@@ -1610,20 +1620,13 @@ export default function App() {
         {/* ══ PICKS ══════════════════════════════════════════════════════════ */}
         {tab === "picks" && (
           <div>
-            <div className="row between mb16" style={{alignItems:'flex-start', gap:12}}>
-              {/* Entry toggle — switch between Entry 1 and Entry 2 */}
-              <div className="entry-toggle">
-                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
-                  Entry 1{submitted && <span className="entry-check">✓</span>}
-                </button>
-                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
-                  Entry 2{submitted2 && <span className="entry-check">✓</span>}
-                </button>
-              </div>
+            {/* How to Play button — top right */}
+            <div className="row mb16" style={{justifyContent:'flex-end'}}>
               <button className="info-btn" onClick={() => setInfoOpen(true)}>
                 <span className="info-btn-icon">ℹ</span> How to Play
               </button>
             </div>
+
             <div className="legend">
               <div style={{display:'flex', gap:20, flexWrap:'wrap', width:'100%'}}>
                 <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
@@ -1634,6 +1637,18 @@ export default function App() {
               <div style={{display:'flex', gap:24, flexWrap:'wrap', width:'100%', marginTop:6, paddingTop:6, borderTop:'1px solid var(--border)'}}>
                 <span>Max possible: <strong>{MAX_POINTS}pts</strong></span>
                 <span style={{color:'var(--text3)', fontSize:'0.72rem'}}>Games pts only awarded if winner is correct</span>
+              </div>
+            </div>
+
+            {/* Entry toggle — switch between Entry 1 and Entry 2 */}
+            <div style={{marginBottom:20}}>
+              <div className="entry-toggle">
+                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
+                  Entry 1{submitted && <span className="entry-check">✓</span>}
+                </button>
+                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
+                  Entry 2{submitted2 && <span className="entry-check">✓</span>}
+                </button>
               </div>
             </div>
 
@@ -1656,11 +1671,18 @@ export default function App() {
             <div className="form">
               <div className="g2">
                 <div>
-                  <label className="fl">Your Name *</label>
-                  <input className="fi" placeholder="e.g. Mike Jordan" value={myName} onChange={e => setMyName(e.target.value)} disabled={submitted || picksLocked} />
+                  <label className="fl">
+                    Your Name{!(activeEntry === 1 ? myName.trim() : (myName2.trim() || myName.trim())) && <span style={{color:'var(--red)',fontWeight:700,marginLeft:3}}>*</span>}
+                  </label>
+                  <input className="fi" placeholder="e.g. Mike Jordan"
+                    value={activeEntry === 1 ? myName : myName2}
+                    onChange={e => activeEntry === 1 ? setMyName(e.target.value) : setMyName2(e.target.value)}
+                    disabled={(activeEntry === 1 ? submitted : false) || picksLocked} />
                 </div>
                 <div>
-                  <label className="fl">Email *</label>
+                  <label className="fl">
+                    Email{!myEmail.trim() && <span style={{color:'var(--red)',fontWeight:700,marginLeft:3}}>*</span>}
+                  </label>
                   <input className="fi" type="email" placeholder="your@email.com" value={myEmail} onChange={e => setMyEmail(e.target.value)} disabled={picksLocked} />
                 </div>
               </div>
@@ -1673,8 +1695,9 @@ export default function App() {
                 </button>
                 {picksLocked
                   ? <span className="xs" style={{color:"var(--red)"}}>🔒 Picks locked</span>
-                  : <><span className="sm muted">{pickedCount}/{totalSeries} series picked</span>
-                    {!allPicked && <span className="xs muted">({totalSeries - pickedCount} to go)</span>}</>
+                  : <span style={{fontWeight:700, color: allPicked ? 'var(--green)' : 'var(--red)'}}>
+                      {allPicked ? `✓ ${pickedCount}/${totalSeries} series picked` : `${pickedCount}/${totalSeries} series picked — ${totalSeries - pickedCount} to go`}
+                    </span>
                 }
               </div>
             </div>
@@ -1713,7 +1736,7 @@ export default function App() {
                   const baseKey  = isEntry2 ? p.id.slice(0, -3) : p.id;
                   const isMe     = baseKey === myKey;
                   const rankClass = isMe ? "me" : "";
-                  const displayName = isEntry2 ? `${p.name} (2)` : p.name;
+                  const displayName = isEntry2 ? (p.name2 || `${p.name} (2)`) : p.name;
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
                   // Shorten long team names to just the nickname (last word)
@@ -1808,6 +1831,19 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Entry toggle — selects which entry's picks are used as ghost reference + auto-fill source */}
+                <div style={{marginBottom:20}}>
+                  <div className="xs muted" style={{marginBottom:8, letterSpacing:'1px'}}>Viewing picks for:</div>
+                  <div className="entry-toggle">
+                    <button className={`entry-btn ${scenarioEntry === 1 ? "active" : ""}`} onClick={() => setScenarioEntry(1)}>
+                      Entry 1{submitted && <span className="entry-check">✓</span>}
+                    </button>
+                    <button className={`entry-btn ${scenarioEntry === 2 ? "active" : ""}`} onClick={() => setScenarioEntry(2)}>
+                      Entry 2{submitted2 && <span className="entry-check">✓</span>}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="scenario-layout">
                   {/* Left column: projected leaderboard */}
                   <div className="scenario-lb-col">
@@ -1819,7 +1855,7 @@ export default function App() {
                         const isEntry2Sc = p.id?.endsWith('__2');
                         const baseKeySc  = isEntry2Sc ? p.id.slice(0, -3) : p.id;
                         const isMe = baseKeySc === myKey;
-                        const displayNameSc = isEntry2Sc ? `${p.name} (2)` : p.name;
+                        const displayNameSc = isEntry2Sc ? (p.name2 || `${p.name} (2)`) : p.name;
                         const baseEntry = leaderboard.find(b => b.id === p.id);
                         const delta = p.points - (baseEntry?.points || 0);
                         return (
@@ -1856,9 +1892,9 @@ export default function App() {
                         results={results}
                         scenarioMode={true}
                         myPicksForScenario={
-                          Object.keys(activePicks).length > 0
-                            ? activePicks
-                            : (participants[myKey]?.[activeEntry === 1 ? 'picks' : 'picks2'] || {})
+                          scenarioEntry === 1
+                            ? (Object.keys(myPicks).length  > 0 ? myPicks  : (participants[myKey]?.picks  || {}))
+                            : (Object.keys(myPicks2).length > 0 ? myPicks2 : (participants[myKey]?.picks2 || {}))
                         }
                         onScenarioPick={handleScenarioPick}
                       />
