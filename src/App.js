@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { ref, onValue, set, update } from "firebase/database";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
@@ -33,8 +33,8 @@ const css = `
   .hdr-sub { font-size:0.68rem; letter-spacing:3px; color:var(--text2); text-transform:uppercase; margin-top:4px; }
   .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  @keyframes spin-ball { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
-  .spin-ball { display:inline-block; animation:spin-ball 2.2s linear infinite; margin-right:6px; line-height:1; vertical-align:middle; }
+  @keyframes spin-ball { from { transform:perspective(300px) rotateY(0deg); } to { transform:perspective(300px) rotateY(360deg); } }
+  .spin-ball { display:inline-flex; width:1em; height:1em; align-items:center; justify-content:center; animation:spin-ball 1.6s linear infinite; margin-right:6px; vertical-align:middle; }
 
   /* Gold tint on native date/time picker icons */
   input[type="date"]::-webkit-calendar-picker-indicator,
@@ -51,6 +51,33 @@ const css = `
     background:none; border:none; cursor:pointer; padding:2px; line-height:1;
     color:var(--gold); opacity:0.8; transition:opacity 0.15s; }
   .pw-eye:hover { opacity:1; }
+
+  /* ── Pool Stats: Selection Breakdown table ───────────────────────── */
+  .sbt-wrap { overflow-x:auto; margin-bottom:28px; }
+  .sbt { width:100%; border-collapse:collapse; font-size:0.72rem; }
+  .sbt thead th { background:var(--surface3); color:var(--gold); font-family:'Bebas Neue',sans-serif;
+    letter-spacing:1.5px; padding:7px 10px; border:1px solid var(--border2);
+    text-align:center; white-space:nowrap; }
+  .sbt thead th.sbt-lh { text-align:left; }
+  .sbt tbody td { padding:5px 9px; border:1px solid var(--border); color:var(--text);
+    background:var(--surface2); vertical-align:middle; }
+  .sbt tbody tr:hover td { background:var(--surface3); }
+  .sbt-conf-cell { writing-mode:vertical-rl; transform:rotate(180deg);
+    font-family:'Bebas Neue',sans-serif; letter-spacing:3px; font-size:0.82rem;
+    text-align:center; padding:0 8px !important; white-space:nowrap; }
+  .sbt-conf-West { color:#fb923c !important; background:rgba(194,65,12,0.1) !important; }
+  .sbt-conf-East { color:#7b9ff5 !important; background:rgba(59,91,219,0.1) !important; }
+  .sbt-sep { border-top:2px solid var(--border2) !important; }
+  .sbt-seed { text-align:center !important; color:var(--text3) !important;
+    font-family:'JetBrains Mono',monospace; font-size:0.65rem; width:32px; }
+  .sbt-num { text-align:right !important; color:var(--text2) !important;
+    font-family:'JetBrains Mono',monospace; width:28px; padding-right:8px !important; }
+  .sbt-pct-cell { min-width:115px; }
+  .sbt-bar { height:14px; background:var(--surface); border-radius:2px; overflow:hidden; flex:1; min-width:30px; }
+  .sbt-fill-West { height:100%; background:rgba(215,105,50,0.55); border-radius:2px; transition:width 0.4s; }
+  .sbt-fill-East { height:100%; background:rgba(80,125,215,0.55); border-radius:2px; transition:width 0.4s; }
+  .sbt-pct-num { font-family:'JetBrains Mono',monospace; font-size:0.64rem; color:var(--text2);
+    min-width:40px; text-align:right; white-space:nowrap; }
 
   /* Tabs */
   .tabs { display:flex; border-bottom:1px solid var(--border); margin:20px 0 28px; }
@@ -1492,6 +1519,25 @@ export default function App() {
   }).length;
   const scenarioAllPicked = scenarioPickedCount === totalSeries;
 
+  // ── Pool Stats: selection breakdown by round ──
+  const allStatsEntries = Object.values(participants).flatMap(p => {
+    const e = [];
+    if (p.picks  && Object.keys(p.picks ).length > 0) e.push(p.picks);
+    if (p.picks2 && Object.keys(p.picks2).length > 0) e.push(p.picks2);
+    return e;
+  });
+  const statsTotalEntries = allStatsEntries.length;
+  const statsTeams = [];
+  BRACKET_CONFIG.rounds[0].series.forEach(s => {
+    statsTeams.push({ team:s.top,    seed:s.topSeed,    conf:s.conference, r1Id:s.id });
+    statsTeams.push({ team:s.bottom, seed:s.bottomSeed, conf:s.conference, r1Id:s.id });
+  });
+  const statsWest = statsTeams.filter(t => t.conf === "West").sort((a,b) => a.seed - b.seed);
+  const statsEast = statsTeams.filter(t => t.conf === "East").sort((a,b) => a.seed - b.seed);
+  const statsCount = (team, roundIdx, r1Id) => roundIdx === 0
+    ? allStatsEntries.filter(p => p[r1Id]?.winner === team).length
+    : allStatsEntries.filter(p => BRACKET_CONFIG.rounds[roundIdx].series.some(s => p[s.id]?.winner === team)).length;
+
   // ── Submit ──
   const handleSubmit = async () => {
     setSubmitError(""); // clear any lingering inline error on every attempt
@@ -2137,7 +2183,82 @@ export default function App() {
             </div>
 
             {picksLocked ? (
-              resolvedAdminRounds.map((round) => {
+              <>
+                {/* ── Selection Breakdown by Round table ── */}
+                {statsTotalEntries > 0 && (
+                  <div style={{marginBottom:28}}>
+                    <div className="sec" style={{marginTop:4}}>Selection Breakdown — By Round</div>
+                    <div style={{fontSize:'0.68rem', color:'var(--text3)', marginBottom:10}}>
+                      Based on {statsTotalEntries} total {statsTotalEntries === 1 ? "entry" : "entries"}
+                    </div>
+                    <div className="sbt-wrap">
+                      <table className="sbt">
+                        <thead>
+                          <tr>
+                            <th colSpan={11} style={{textAlign:'center', fontSize:'0.82rem', letterSpacing:'3px', borderBottom:'2px solid var(--border2)', paddingTop:11, paddingBottom:11}}>
+                              NBA PLAYOFFS SELECTION BREAKDOWN (BY ROUND)
+                            </th>
+                          </tr>
+                          <tr>
+                            <th style={{width:28}}></th>
+                            <th className="sbt-lh" style={{width:36}}>SEED</th>
+                            <th className="sbt-lh">TEAM</th>
+                            <th colSpan={2}>1ST ROUND</th>
+                            <th colSpan={2}>CONF SEMIS</th>
+                            <th colSpan={2}>CONF FINALS</th>
+                            <th colSpan={2}>NBA FINALS</th>
+                          </tr>
+                          <tr>
+                            <th></th><th></th><th></th>
+                            <th style={{width:28}}>#</th><th style={{minWidth:115}}>%</th>
+                            <th style={{width:28}}>#</th><th style={{minWidth:115}}>%</th>
+                            <th style={{width:28}}>#</th><th style={{minWidth:115}}>%</th>
+                            <th style={{width:28}}>#</th><th style={{minWidth:115}}>%</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[{conf:"West",teams:statsWest},{conf:"East",teams:statsEast}].map(({conf,teams}) =>
+                            teams.map((t, idx) => {
+                              const sep = conf === "East" && idx === 0;
+                              const r = [0,1,2,3].map(ri => {
+                                const count = statsCount(t.team, ri, t.r1Id);
+                                const pct   = statsTotalEntries > 0 ? count / statsTotalEntries * 100 : 0;
+                                return { count, pct };
+                              });
+                              return (
+                                <tr key={t.team}>
+                                  {idx === 0 && (
+                                    <td rowSpan={teams.length} className={`sbt-conf-cell sbt-conf-${conf}`}>
+                                      {conf.toUpperCase()}
+                                    </td>
+                                  )}
+                                  <td className={`sbt-seed${sep?" sbt-sep":""}`}>{conf[0]}{t.seed}</td>
+                                  <td className={sep?" sbt-sep":""} style={{whiteSpace:'nowrap'}}>{t.team}</td>
+                                  {r.map(({count,pct}, ri) => (
+                                    <Fragment key={ri}>
+                                      <td className={`sbt-num${sep?" sbt-sep":""}`}>{count}</td>
+                                      <td className={`sbt-pct-cell${sep?" sbt-sep":""}`}>
+                                        <div style={{display:'flex', alignItems:'center', gap:5}}>
+                                          <div className="sbt-bar">
+                                            <div className={`sbt-fill-${conf}`} style={{width:`${pct}%`}} />
+                                          </div>
+                                          <span className="sbt-pct-num">{pct.toFixed(1)}%</span>
+                                        </div>
+                                      </td>
+                                    </Fragment>
+                                  ))}
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Per-series pick distribution (existing) ── */}
+                {resolvedAdminRounds.map((round) => {
                 // Only show series where both teams are known real teams (resolved from admin results)
                 const resolvedSeries = round.series.filter(s =>
                   s.top in TEAM_SEEDS && s.bottom in TEAM_SEEDS
@@ -2149,16 +2270,9 @@ export default function App() {
                     <div className="sec">{round.name} — Pick Distribution</div>
                     {resolvedSeries.map((series) => {
                       const rs = getAdminResultForSeries(results, series.id);
-                      // Count all submitted entries
-                      const allEntries = Object.values(participants).flatMap(p => {
-                        const entries = [];
-                        if (p.picks  && Object.keys(p.picks ).length > 0) entries.push(p.picks);
-                        if (p.picks2 && Object.keys(p.picks2).length > 0) entries.push(p.picks2);
-                        return entries;
-                      });
-                      const total   = allEntries.length;
-                      const pickTop = allEntries.filter(picks => picks[series.id]?.winner === series.top).length;
-                      const pickBot = allEntries.filter(picks => picks[series.id]?.winner === series.bottom).length;
+                      const total   = allStatsEntries.length;
+                      const pickTop = allStatsEntries.filter(picks => picks[series.id]?.winner === series.top).length;
+                      const pickBot = allStatsEntries.filter(picks => picks[series.id]?.winner === series.bottom).length;
                       // My pick labels — Entry 1 (gold) and Entry 2 (cyan)
                       const myPick1Winner = myPicks?.[series.id]?.winner;
                       const myPick2Winner = myPicks2?.[series.id]?.winner;
@@ -2207,7 +2321,8 @@ export default function App() {
                     })}
                   </div>
                 );
-              })
+              })}
+              </>
             ) : (
               <div className="empty">
                 <h3>POOL STATS AVAILABLE AFTER DEADLINE</h3>
