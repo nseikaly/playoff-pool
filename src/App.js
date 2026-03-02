@@ -415,7 +415,7 @@ const css = `
   .bm-team:last-of-type { border-bottom:none; }
   .bm-team:hover:not(:disabled) { background:rgba(201,168,76,0.06); color:var(--gold); }
   .bm-team:disabled { cursor:default; }
-  .bm-team-tbd { pointer-events:none; opacity:0.12; }  /* blank TBD slot — upstream pick not yet made */
+  .bm-team-tbd { pointer-events:none; opacity:0.12; min-height:44px; }  /* blank TBD slot — upstream pick not yet made */
   .bm-team.sel   { background:rgba(201,168,76,0.1); color:var(--gold2); }
   .bm-team.ok    { background:rgba(34,197,94,0.1); color:var(--green); }
   .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); text-decoration:line-through; }
@@ -1434,7 +1434,18 @@ export default function App() {
     const activeEmail = activeEntry === 1 ? myEmail.trim() : (myEmail2.trim() || myEmail.trim());
     if (!myName.trim()) return showToast("Please enter your name first");
     if (!activeEmail)   return showToast("Please enter your email address");
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(activeEmail)) return showToast("Please enter a valid email address (e.g. you@email.com)");
     if (!allPicked)     return showToast(`Complete all ${totalSeries} picks first`);
+    // Duplicate name guard — only for Entry 1 since Entry 2 shares the same Firebase key
+    if (activeEntry === 1) {
+      const key = sanitize(myName.trim());
+      const prevKey = sanitize(localStorage.getItem("pool_name") || "");
+      if (key !== prevKey && participants[key]) {
+        return showToast(`"${myName.trim()}" is already taken — please choose a different name`);
+      }
+    }
     setSaving(true);
     try {
       const key = sanitize(myName);
@@ -1703,7 +1714,9 @@ export default function App() {
 
             {!picksLocked && isSubmitted && (
               <div className="alert alert-success mb16">
-                ✓ Entry {activeEntry} submitted as <strong>{myName}</strong>. You can update and resubmit any time before the deadline.
+                ✓ Entry {activeEntry} submitted as <strong>
+                  {activeEntry === 1 ? myName : (myName2.trim() || myName.trim())}
+                </strong>. You can update and resubmit any time before the deadline.
               </div>
             )}
 
