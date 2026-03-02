@@ -33,6 +33,24 @@ const css = `
   .hdr-sub { font-size:0.68rem; letter-spacing:3px; color:var(--text2); text-transform:uppercase; margin-top:4px; }
   .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  @keyframes spin-ball { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+  .spin-ball { display:inline-block; animation:spin-ball 2.2s linear infinite; margin-right:6px; line-height:1; vertical-align:middle; }
+
+  /* Gold tint on native date/time picker icons */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) sepia(1) saturate(3) hue-rotate(358deg) brightness(0.85);
+    cursor: pointer; opacity: 0.9;
+  }
+  /* Hide native Edge password reveal so our custom toggle is the only one */
+  input[type="password"]::-ms-reveal { display: none; }
+  /* Custom password eye toggle */
+  .pw-wrap { position:relative; flex:1; }
+  .pw-wrap input { width:100%; padding-right:36px; }
+  .pw-eye { position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    background:none; border:none; cursor:pointer; padding:2px; line-height:1;
+    color:var(--gold); opacity:0.8; transition:opacity 0.15s; }
+  .pw-eye:hover { opacity:1; }
 
   /* Tabs */
   .tabs { display:flex; border-bottom:1px solid var(--border); margin:20px 0 28px; }
@@ -1365,6 +1383,7 @@ export default function App() {
   const [adminEmail,       setAdminEmail]       = useState("");
   const [adminPass,        setAdminPass]        = useState("");
   const [adminLoginError,  setAdminLoginError]  = useState("");
+  const [showAdminPass,    setShowAdminPass]    = useState(false);
   const [picksLocked,  setPicksLocked]  = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
   const [scenarioPicks,  setScenarioPicks]  = useState({});  // local session-only scenario picks
@@ -1740,7 +1759,7 @@ export default function App() {
         {/* ── Header ── */}
         <div className="hdr">
           <div>
-            <div className="hdr-title">{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</div>
+            <div className="hdr-title"><span className="spin-ball">🏀</span>{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</div>
             <div className="hdr-sub">2026 NBA Playoffs · Built & Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
           </div>
           <div className="row gap8">
@@ -2218,11 +2237,21 @@ export default function App() {
               autoFocus
             />
             <div className="admin-gate-row">
-              <input
-                className="fi" type="password" placeholder="Password"
-                value={adminPass} onChange={e => { setAdminPass(e.target.value); setAdminLoginError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleAdminLogin()}
-              />
+              <div className="pw-wrap">
+                <input
+                  className="fi" type={showAdminPass ? "text" : "password"} placeholder="Password"
+                  value={adminPass} onChange={e => { setAdminPass(e.target.value); setAdminLoginError(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleAdminLogin()}
+                />
+                <button type="button" className="pw-eye" tabIndex={-1}
+                  onClick={() => setShowAdminPass(v => !v)}
+                  aria-label={showAdminPass ? "Hide password" : "Show password"}>
+                  {showAdminPass
+                    ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
               <button className="btn btn-gold" onClick={handleAdminLogin}>Sign In</button>
             </div>
             <div className="admin-gate-err">{adminLoginError}</div>
