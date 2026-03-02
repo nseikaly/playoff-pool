@@ -1805,7 +1805,7 @@ export default function App() {
         <div className="hdr">
           <div>
             <div className="hdr-title" style={{display:'flex',alignItems:'center'}}>
-              <svg viewBox="0 0 200 200" style={{width:'2.2rem',height:'2.2rem',marginRight:'9px',flexShrink:0}} aria-hidden="true">
+              <svg viewBox="0 0 200 200" style={{width:'2.2rem',height:'2.2rem',marginRight:'16px',flexShrink:0}} aria-hidden="true">
                 <defs>
                   <radialGradient id="bb-fill" cx="36%" cy="28%" r="75%">
                     <stop offset="0%"   stopColor="#FFB84D"/>
@@ -1815,19 +1815,26 @@ export default function App() {
                   </radialGradient>
                   <radialGradient id="bb-edge" cx="50%" cy="50%" r="50%">
                     <stop offset="60%"  stopColor="rgba(0,0,0,0)"/>
-                    <stop offset="100%" stopColor="rgba(0,0,0,0.62)"/>
+                    <stop offset="100%" stopColor="rgba(0,0,0,0.65)"/>
                   </radialGradient>
                   <clipPath id="bb-clip"><circle cx="100" cy="100" r="93"/></clipPath>
                 </defs>
+                {/* Sphere */}
                 <circle cx="100" cy="100" r="93" fill="url(#bb-fill)"/>
-                <g clipPath="url(#bb-clip)" fill="none" stroke="#180500" strokeLinecap="round" strokeLinejoin="round">
-                  <path strokeWidth="5.5" d="M7,100 C35,70 65,70 100,100 C135,130 165,130 193,100"/>
-                  <path strokeWidth="5.5" d="M100,7 C130,35 130,65 100,100 C70,135 70,165 100,193"/>
-                  <path strokeWidth="4.5" d="M38,10 C62,46 68,76 66,104 C64,132 55,164 42,190"/>
-                  <path strokeWidth="4.5" d="M162,10 C138,46 132,76 134,104 C136,132 145,164 158,190"/>
+                <g clipPath="url(#bb-clip)" fill="none" stroke="#1A0600" strokeLinecap="round">
+                  {/* Horizontal S-seam: dips up in left half, down in right half */}
+                  <path strokeWidth="5.5" d="M7,100 C40,82 60,82 100,100 C140,118 160,118 193,100"/>
+                  {/* Vertical S-seam: curves right in top half, left in bottom half */}
+                  <path strokeWidth="5.5" d="M100,7 C118,40 118,60 100,100 C82,140 82,160 100,193"/>
+                  {/* Left panel arc — bows outward (left) */}
+                  <path strokeWidth="4.5" d="M48,8 C14,55 14,145 48,192"/>
+                  {/* Right panel arc — bows outward (right) */}
+                  <path strokeWidth="4.5" d="M152,8 C186,55 186,145 152,192"/>
                 </g>
+                {/* Edge shadow for depth */}
                 <circle cx="100" cy="100" r="93" fill="url(#bb-edge)"/>
-                <ellipse cx="63" cy="47" rx="26" ry="16" fill="rgba(255,255,255,0.23)" transform="rotate(-28,63,47)"/>
+                {/* Specular highlight */}
+                <ellipse cx="63" cy="47" rx="26" ry="16" fill="rgba(255,255,255,0.22)" transform="rotate(-28,63,47)"/>
               </svg>
               <span>{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</span>
             </div>
