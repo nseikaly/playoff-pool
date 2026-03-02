@@ -44,7 +44,7 @@ const css = `
   /* Entry toggle (dual-entry pick switcher) */
   .entry-toggle { display:flex; gap:0; margin-bottom:18px; border:1px solid var(--border);
     border-radius:8px; overflow:hidden; width:fit-content; }
-  .entry-btn { padding:11px 34px; background:transparent; border:none; cursor:pointer;
+  .entry-btn { padding:11px 34px; min-width:155px; text-align:center; background:transparent; border:none; cursor:pointer;
     color:var(--text2); font-size:0.82rem; font-weight:700; letter-spacing:1px;
     font-family:'Bebas Neue',sans-serif; transition:all 0.15s; white-space:nowrap; }
   .entry-btn:not(:last-child) { border-right:1px solid var(--border); }
@@ -415,6 +415,7 @@ const css = `
   .bm-team:last-of-type { border-bottom:none; }
   .bm-team:hover:not(:disabled) { background:rgba(201,168,76,0.06); color:var(--gold); }
   .bm-team:disabled { cursor:default; }
+  .bm-team-tbd { pointer-events:none; opacity:0.12; }  /* blank TBD slot — upstream pick not yet made */
   .bm-team.sel   { background:rgba(201,168,76,0.1); color:var(--gold2); }
   .bm-team.ok    { background:rgba(34,197,94,0.1); color:var(--green); }
   .bm-team.wrong { background:rgba(239,68,68,0.11); color:rgba(239,68,68,0.72); text-decoration:line-through; }
@@ -671,15 +672,23 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
   const topSeed    = TEAM_SEEDS[series.top];
   const bottomSeed = TEAM_SEEDS[series.bottom];
 
+  // A slot is "real" when its team name is a known seeded (R1) team, or when the
+  // series is already settled by admin results. Unresolved later-round slots whose
+  // upstream pick hasn't been made yet keep a placeholder name (not in TEAM_SEEDS)
+  // and should be shown as blank/non-interactive.
+  const topIsReal    = (series.top    in TEAM_SEEDS) || settled;
+  const bottomIsReal = (series.bottom in TEAM_SEEDS) || settled;
+  const bothReal     = topIsReal && bottomIsReal;
+
   const pickWinner = (team) => {
-    if (!readOnly) {
+    if (!readOnly && bothReal) {
       // clicking the already-selected team deselects it (and clears games)
       const next = pick.winner === team ? { ...pick, winner: undefined, games: undefined } : { ...pick, winner: team };
       onPick?.(series.id, next);
     }
   };
   const pickGames = (g) => {
-    if (!readOnly) {
+    if (!readOnly && bothReal) {
       // clicking the already-selected games count deselects it
       const next = pick.games === g ? { ...pick, games: undefined } : { ...pick, games: g };
       onPick?.(series.id, next);
@@ -737,16 +746,26 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
           <span className="bm-ghost-arrow">← your pick (eliminated)</span>
         </div>
       )}
-      <button className={`bm-team ${teamClass(series.top)}`} onClick={() => pickWinner(series.top)} disabled={readOnly}>
-        <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
-        <span className="bm-name">{series.top}</span>
-        {topSeed != null && <span className="bm-seed">#{topSeed}</span>}
-      </button>
-      <button className={`bm-team ${teamClass(series.bottom)}`} onClick={() => pickWinner(series.bottom)} disabled={readOnly}>
-        <span className="bm-logo"><TeamLogo name={series.bottom} size={26} state={teamClass(series.bottom)} /></span>
-        <span className="bm-name">{series.bottom}</span>
-        {bottomSeed != null && <span className="bm-seed">#{bottomSeed}</span>}
-      </button>
+      {topIsReal ? (
+        <button className={`bm-team ${teamClass(series.top)}`}
+          onClick={() => pickWinner(series.top)} disabled={readOnly || !bothReal}>
+          <span className="bm-logo"><TeamLogo name={series.top} size={26} state={teamClass(series.top)} /></span>
+          <span className="bm-name">{series.top}</span>
+          {topSeed != null && <span className="bm-seed">#{topSeed}</span>}
+        </button>
+      ) : (
+        <button className="bm-team bm-team-tbd" disabled aria-label="TBD — pick upstream matchup first" />
+      )}
+      {bottomIsReal ? (
+        <button className={`bm-team ${teamClass(series.bottom)}`}
+          onClick={() => pickWinner(series.bottom)} disabled={readOnly || !bothReal}>
+          <span className="bm-logo"><TeamLogo name={series.bottom} size={26} state={teamClass(series.bottom)} /></span>
+          <span className="bm-name">{series.bottom}</span>
+          {bottomSeed != null && <span className="bm-seed">#{bottomSeed}</span>}
+        </button>
+      ) : (
+        <button className="bm-team bm-team-tbd" disabled aria-label="TBD — pick upstream matchup first" />
+      )}
       {bottomGhost && (
         <div className="bm-ghost-bottom" title={`Your pick for this slot: ${bottomGhost} (eliminated)`}>
           <TeamLogo name={bottomGhost} size={13} state="wrong" />
@@ -754,10 +773,13 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
           <span className="bm-ghost-arrow">← your pick (eliminated)</span>
         </div>
       )}
-      <div className="bm-games" style={settled ? {background:'rgba(125,154,176,0.10)'} : {}}>
+      <div className="bm-games"
+        style={{...(settled ? {background:'rgba(125,154,176,0.10)'} : {}),
+                ...(!bothReal && !settled ? {opacity:0.18, pointerEvents:'none'} : {})}}>
         <span className="bm-gl">G</span>
         {GAME_OPTIONS.map(g => (
-          <button key={g} className={`bm-gbtn ${gamesClass(g)}`} onClick={() => pickGames(g)} disabled={readOnly}>{g}</button>
+          <button key={g} className={`bm-gbtn ${gamesClass(g)}`}
+            onClick={() => pickGames(g)} disabled={readOnly || !bothReal}>{g}</button>
         ))}
         <span className={`bm-ps ${hasPick ? "ok" : "pending"}`}>{hasPick ? "✓" : "..."}</span>
       </div>
@@ -1656,14 +1678,19 @@ export default function App() {
               </div>
             </div>
 
-            {/* Entry toggle — switch between Entry 1 and Entry 2 */}
+            {/* Entry toggle — switch between Entry 1 and Entry 2.
+                Once an entry is submitted, the pill shows the participant's display name. */}
             <div style={{marginBottom:20}}>
               <div className="entry-toggle">
                 <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
-                  Entry 1{submitted && <span className="entry-check">✓</span>}
+                  {submitted && myName.trim() ? myName.trim().slice(0,14) : "Entry 1"}
+                  {submitted && <span className="entry-check">✓</span>}
                 </button>
                 <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
-                  Entry 2{submitted2 && <span className="entry-check">✓</span>}
+                  {submitted2 && (myName2.trim() || myName.trim())
+                    ? (myName2.trim() || myName.trim()).slice(0,14)
+                    : "Entry 2"}
+                  {submitted2 && <span className="entry-check">✓</span>}
                 </button>
               </div>
             </div>
@@ -1692,7 +1719,7 @@ export default function App() {
                   <label className="fl">
                     Your Name{!(activeEntry === 1 ? myName.trim() : (myName2.trim() || myName.trim())) && <span style={{color:'var(--red)',fontWeight:700,marginLeft:3}}>*</span>}
                   </label>
-                  <input className="fi" placeholder="e.g. Mike Jordan"
+                  <input className="fi" placeholder="e.g. Mike Jordan" maxLength={16}
                     value={activeEntry === 1 ? myName : myName2}
                     onChange={e => activeEntry === 1 ? setMyName(e.target.value) : setMyName2(e.target.value)}
                     disabled={(activeEntry === 1 ? submitted : false) || picksLocked} />
@@ -1710,7 +1737,7 @@ export default function App() {
               </div>
               <div className="row gap8 wrap">
                 <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !(activeEntry===1 ? myEmail.trim() : (myEmail2.trim()||myEmail.trim())) || saving || picksLocked}>
-                  {saving ? "Saving…" : isSubmitted ? `Update Entry ${activeEntry}` : `Submit Entry ${activeEntry}`}
+                  {saving ? "Saving…" : isSubmitted ? "Update Entry" : `Submit Entry ${activeEntry}`}
                 </button>
                 <button className="btn btn-ghost" onClick={() => window.print()} title="Print your picks bracket">
                   🖨 Print Picks
@@ -1852,10 +1879,14 @@ export default function App() {
                   <div className="xs muted" style={{marginBottom:8, letterSpacing:'1px'}}>Viewing picks for:</div>
                   <div className="entry-toggle">
                     <button className={`entry-btn ${scenarioEntry === 1 ? "active" : ""}`} onClick={() => setScenarioEntry(1)}>
-                      Entry 1{submitted && <span className="entry-check">✓</span>}
+                      {submitted && myName.trim() ? myName.trim().slice(0,14) : "Entry 1"}
+                      {submitted && <span className="entry-check">✓</span>}
                     </button>
                     <button className={`entry-btn ${scenarioEntry === 2 ? "active" : ""}`} onClick={() => setScenarioEntry(2)}>
-                      Entry 2{submitted2 && <span className="entry-check">✓</span>}
+                      {submitted2 && (myName2.trim() || myName.trim())
+                        ? (myName2.trim() || myName.trim()).slice(0,14)
+                        : "Entry 2"}
+                      {submitted2 && <span className="entry-check">✓</span>}
                     </button>
                   </div>
                 </div>
