@@ -156,7 +156,7 @@ const css = `
   .me .rank { color:#b4c4d4; }
   .lbn { font-weight:600; font-size:0.88rem; }
   .lbn-you { font-size:0.68rem; color:#94a3b8; font-weight:500; letter-spacing:0.3px; margin-left:5px; }
-  .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; max-width:140px; }
+  .pb { height:3px; background:var(--border); border-radius:2px; margin-top:5px; overflow:hidden; }
   .pbf { height:100%; background:linear-gradient(90deg,var(--gold),var(--amber)); border-radius:2px; transition:width 0.6s; }
   .lbr.me .pbf { background:linear-gradient(90deg,#8fa8bc,#b4c4d4); }
   .pts { font-family:'Bebas Neue',sans-serif; font-size:1.5rem; color:var(--gold); line-height:1; }
@@ -370,9 +370,9 @@ const css = `
   .info-btn:hover { border-color:var(--gold); color:var(--gold); background:rgba(201,168,76,0.05); }
   .info-btn-icon { font-style:normal; font-size:0.78rem; line-height:1; }
 
-  .info-backdrop { position:fixed; inset:0; background:rgba(4,7,13,0.75); z-index:300;
+  .info-backdrop { position:fixed; inset:0; background:rgba(4,7,13,0.42); z-index:300;
     display:flex; align-items:flex-start; justify-content:flex-end;
-    padding:64px 20px 40px; backdrop-filter:blur(4px); animation:ov-fade 0.18s ease; }
+    padding:64px 20px 40px; backdrop-filter:blur(3px); animation:ov-fade 0.18s ease; }
   .info-panel { width:370px; max-height:calc(100vh - 104px); overflow-y:auto;
     background:var(--surface); border:1px solid var(--border2); border-radius:12px;
     box-shadow:0 20px 60px rgba(0,0,0,0.5); animation:ov-rise 0.2s ease; flex-shrink:0; }
@@ -477,12 +477,15 @@ const css = `
 
   /* ─── Print styles ────────────────────────────────────────────────────────── */
   @media print {
-    .tabs, .hdr .row, .legend, .form, .alert, .toast { display:none !important; }
-    .app { padding:0 8px; max-width:100%; }
+    @page { size: A4 landscape; margin: 8mm; }
+    .tabs, .hdr, .legend, .form, .alert, .toast,
+    .entry-toggle, .sec { display:none !important; }
+    .app { padding:0; max-width:100%; }
     body { background:white !important; color:#111 !important; }
     :root { --bg:white; --surface:white; --surface2:#f5f5f5; --surface3:#eee;
       --border:#ccc; --border2:#bbb; --text:#111; --text2:#333; --text3:#666; }
     .bm, .sc { break-inside:avoid; }
+    .bracket-print-wrapper { zoom: 0.6; }
   }
 
 `;
@@ -873,17 +876,26 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
       let topGhost = null, bottomGhost = null;
       if (!isSettled && FEEDS_FROM[sid]) {
         const feed = FEEDS_FROM[sid];
-        // Top slot: did participant's upstream pick get eliminated?
-        const topAdminResult = getAdminResultForSeries(results, feed.top);
-        if (topAdminResult?.winner) {
-          const myTopPick = myPicksForScenario?.[feed.top]?.winner;
-          if (myTopPick && myTopPick !== topAdminResult.winner) topGhost = myTopPick;
+        // Top slot: show ghost if the participant's upstream pick was eliminated
+        // (either the upstream series settled with a different winner, OR the team
+        //  is already in eliminatedTeams from an even earlier round — enabling
+        //  multi-round propagation e.g. R1 loss shows ghost through R2, CF, Finals)
+        const myTopPick = myPicksForScenario?.[feed.top]?.winner;
+        if (myTopPick) {
+          const topAdminResult = getAdminResultForSeries(results, feed.top);
+          if ((topAdminResult?.winner && myTopPick !== topAdminResult.winner) ||
+               eliminatedTeams.has(myTopPick)) {
+            topGhost = myTopPick;
+          }
         }
         // Bottom slot: same logic
-        const bottomAdminResult = getAdminResultForSeries(results, feed.bottom);
-        if (bottomAdminResult?.winner) {
-          const myBottomPick = myPicksForScenario?.[feed.bottom]?.winner;
-          if (myBottomPick && myBottomPick !== bottomAdminResult.winner) bottomGhost = myBottomPick;
+        const myBottomPick = myPicksForScenario?.[feed.bottom]?.winner;
+        if (myBottomPick) {
+          const bottomAdminResult = getAdminResultForSeries(results, feed.bottom);
+          if ((bottomAdminResult?.winner && myBottomPick !== bottomAdminResult.winner) ||
+               eliminatedTeams.has(myBottomPick)) {
+            bottomGhost = myBottomPick;
+          }
         }
       }
 
@@ -1306,6 +1318,7 @@ export default function App() {
   const [myName,    setMyName]    = useState(() => localStorage.getItem("pool_name") || "");
   const [myName2,   setMyName2]   = useState(() => localStorage.getItem("pool_name_2") || "");
   const [myEmail,   setMyEmail]   = useState("");
+  const [myEmail2,  setMyEmail2]  = useState(() => localStorage.getItem("pool_email_2") || "");
   const [submitted, setSubmitted] = useState(() => localStorage.getItem("pool_submitted") === "1");
   const [submitted2, setSubmitted2] = useState(() => localStorage.getItem("pool_submitted_2") === "1");
   const [toast,       setToast]       = useState("");
@@ -1396,8 +1409,9 @@ export default function App() {
 
   // ── Submit ──
   const handleSubmit = async () => {
+    const activeEmail = activeEntry === 1 ? myEmail.trim() : (myEmail2.trim() || myEmail.trim());
     if (!myName.trim()) return showToast("Please enter your name first");
-    if (!myEmail.trim()) return showToast("Please enter your email address");
+    if (!activeEmail)   return showToast("Please enter your email address");
     if (!allPicked)     return showToast(`Complete all ${totalSeries} picks first`);
     setSaving(true);
     try {
@@ -1421,14 +1435,17 @@ export default function App() {
         setActiveEntry(2);
       } else {
         // Entry 2: use update() so we never overwrite entry 1 picks
-        const name2Value = myName2.trim() || myName.trim();
+        const name2Value  = myName2.trim()  || myName.trim();
+        const email2Value = myEmail2.trim() || myEmail.trim();
         await update(ref(db), {
           [`participants/${key}/picks2`]:       myPicks2,
           [`participants/${key}/submittedAt2`]: Date.now(),
           [`participants/${key}/name2`]:        name2Value,
+          [`participants/${key}/email2`]:       email2Value,
         });
         localStorage.setItem("pool_submitted_2", "1");
-        localStorage.setItem("pool_name_2",      name2Value);
+        localStorage.setItem("pool_name_2",  name2Value);
+        localStorage.setItem("pool_email_2", myEmail2.trim());
         setSubmitted2(true);
       }
       showToast(activeEntry === 1 ? "🏆 Entry 1 submitted! Now fill out Entry 2 below." : "🏆 Entry 2 submitted!");
@@ -1615,18 +1632,17 @@ export default function App() {
           ].map(t => (
             <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => { setTab(t.id); setInfoOpen(false); }}>{t.label}</button>
           ))}
+          {/* Info / How-to-Play button — far right of tab bar, hidden on Admin */}
+          {tab !== "admin" && (
+            <button className="info-btn" style={{marginLeft:'auto', alignSelf:'center', marginBottom:2}} onClick={() => setInfoOpen(o => !o)}>
+              <span className="info-btn-icon">ℹ</span> {tab === 'picks' ? 'How to Play' : 'Guide'}
+            </button>
+          )}
         </div>
 
         {/* ══ PICKS ══════════════════════════════════════════════════════════ */}
         {tab === "picks" && (
           <div>
-            {/* How to Play button — top right */}
-            <div className="row mb16" style={{justifyContent:'flex-end'}}>
-              <button className="info-btn" onClick={() => setInfoOpen(true)}>
-                <span className="info-btn-icon">ℹ</span> How to Play
-              </button>
-            </div>
-
             <div className="legend">
               <div style={{display:'flex', gap:20, flexWrap:'wrap', width:'100%'}}>
                 <span>R1: Winner <strong>10pts</strong> + Games <strong>5pts</strong></span>
@@ -1664,7 +1680,9 @@ export default function App() {
               </div>
             )}
 
-            <BracketView picks={activePicks} onPick={handlePick} readOnly={picksLocked} results={results} />
+            <div className="bracket-print-wrapper">
+              <BracketView picks={activePicks} onPick={handlePick} readOnly={picksLocked} results={results} />
+            </div>
 
             {/* Submit */}
             <div className="sec" style={{marginTop:30}}>Submit Entry {activeEntry}</div>
@@ -1681,13 +1699,17 @@ export default function App() {
                 </div>
                 <div>
                   <label className="fl">
-                    Email{!myEmail.trim() && <span style={{color:'var(--red)',fontWeight:700,marginLeft:3}}>*</span>}
+                    Email{!(activeEntry === 1 ? myEmail.trim() : (myEmail2.trim() || myEmail.trim())) && <span style={{color:'var(--red)',fontWeight:700,marginLeft:3}}>*</span>}
                   </label>
-                  <input className="fi" type="email" placeholder="your@email.com" value={myEmail} onChange={e => setMyEmail(e.target.value)} disabled={picksLocked} />
+                  <input className="fi" type="email"
+                    placeholder={activeEntry === 2 ? "different email (optional)" : "your@email.com"}
+                    value={activeEntry === 1 ? myEmail : myEmail2}
+                    onChange={e => activeEntry === 1 ? setMyEmail(e.target.value) : setMyEmail2(e.target.value)}
+                    disabled={picksLocked} />
                 </div>
               </div>
               <div className="row gap8 wrap">
-                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !myEmail.trim() || saving || picksLocked}>
+                <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !(activeEntry===1 ? myEmail.trim() : (myEmail2.trim()||myEmail.trim())) || saving || picksLocked}>
                   {saving ? "Saving…" : isSubmitted ? `Update Entry ${activeEntry}` : `Submit Entry ${activeEntry}`}
                 </button>
                 <button className="btn btn-ghost" onClick={() => window.print()} title="Print your picks bracket">
@@ -1712,9 +1734,6 @@ export default function App() {
                 <div style={{fontFamily:"'Bebas Neue',sans-serif", fontSize:"1rem", letterSpacing:"2px", color:"var(--text2)"}}>STANDINGS</div>
                 <div className="xs muted mt8">{completedCount} of {totalSeries} series complete</div>
               </div>
-              <button className="info-btn" onClick={() => setInfoOpen(true)}>
-                <span className="info-btn-icon">ℹ</span> Guide
-              </button>
             </div>
 
             {picksLocked && (
@@ -1825,9 +1844,6 @@ export default function App() {
                   <div className="row gap8" style={{flexWrap:'wrap'}}>
                     <button className="btn btn-gold" style={{fontSize:"0.72rem"}} onClick={handleScenarioAutoFill}>↺ Auto-fill My Picks</button>
                     <button className="btn btn-danger" style={{fontSize:"0.72rem"}} onClick={handleScenarioClear}>✕ Clear Scenario</button>
-                    <button className="info-btn" onClick={() => setInfoOpen(true)}>
-                      <span className="info-btn-icon">ℹ</span> Guide
-                    </button>
                   </div>
                 </div>
 
@@ -1914,9 +1930,6 @@ export default function App() {
                 <div style={{fontFamily:"'Bebas Neue',sans-serif", fontSize:"1rem", letterSpacing:"2px", color:"var(--text2)"}}>POOL STATS</div>
                 <div className="xs muted mt8">{completedCount} of {totalSeries} series complete</div>
               </div>
-              <button className="info-btn" onClick={() => setInfoOpen(true)}>
-                <span className="info-btn-icon">ℹ</span> Guide
-              </button>
             </div>
             <div className="sg">
               <div className="sc2"><div className="sv">{leaderboard.length}</div><div className="sl">Entries</div></div>
@@ -1930,69 +1943,90 @@ export default function App() {
               </div>
             </div>
 
-            {BRACKET_CONFIG.rounds.map((round, ri) => {
-              const completedSeries = round.series.filter(s => getAdminResultForSeries(results, s.id)?.winner);
-              if (completedSeries.length === 0) return null;
+            {picksLocked ? (
+              resolvedAdminRounds.map((round) => {
+                // Only show series where both teams are known real teams (resolved from admin results)
+                const resolvedSeries = round.series.filter(s =>
+                  s.top in TEAM_SEEDS && s.bottom in TEAM_SEEDS
+                );
+                if (resolvedSeries.length === 0) return null;
 
-              return (
-                <div key={round.id}>
-                  <div className="sec">{round.name} — Pick Distribution</div>
-                  {round.series.map((series) => {
-                    const rs = getAdminResultForSeries(results, series.id);
-                    if (!rs?.winner) return null;
-                    // Count all pick entries (including entry 2 for multi-entry participants)
-                    const allEntries = Object.values(participants).flatMap(p => {
-                      const entries = [];
-                      if (p.picks  && Object.keys(p.picks ).length > 0) entries.push(p.picks);
-                      if (p.picks2 && Object.keys(p.picks2).length > 0) entries.push(p.picks2);
-                      return entries;
-                    });
-                    const total   = allEntries.length;
-                    const pickTop = allEntries.filter(picks => picks[series.id]?.winner === series.top).length;
-                    const pickBot = allEntries.filter(picks => picks[series.id]?.winner === series.bottom).length;
-                    // Show "(your pick)" for the currently active entry
-                    const myPickWinner = activePicks?.[series.id]?.winner;
+                return (
+                  <div key={round.id}>
+                    <div className="sec">{round.name} — Pick Distribution</div>
+                    {resolvedSeries.map((series) => {
+                      const rs = getAdminResultForSeries(results, series.id);
+                      // Count all submitted entries
+                      const allEntries = Object.values(participants).flatMap(p => {
+                        const entries = [];
+                        if (p.picks  && Object.keys(p.picks ).length > 0) entries.push(p.picks);
+                        if (p.picks2 && Object.keys(p.picks2).length > 0) entries.push(p.picks2);
+                        return entries;
+                      });
+                      const total   = allEntries.length;
+                      const pickTop = allEntries.filter(picks => picks[series.id]?.winner === series.top).length;
+                      const pickBot = allEntries.filter(picks => picks[series.id]?.winner === series.bottom).length;
+                      // My pick labels — Entry 1 (gold) and Entry 2 (cyan)
+                      const myPick1Winner = myPicks?.[series.id]?.winner;
+                      const myPick2Winner = myPicks2?.[series.id]?.winner;
+                      const entry1Label   = myName.trim()  || "Entry 1";
+                      const entry2Label   = myName2.trim() || (myName.trim() ? `${myName.trim()} (2)` : "Entry 2");
 
-                    return (
-                      <div key={series.id} style={{marginBottom:14}}>
-                        {/* Matchup label */}
-                        <div style={{display:'flex', alignItems:'center', gap:7, marginBottom:5}}>
-                          <span className={`conf conf-${series.conference}`}>{series.conference}</span>
-                          {series.topSeed != null && (
-                            <span className="xs mono muted">{series.topSeed} vs {series.bottomSeed}</span>
-                          )}
+                      return (
+                        <div key={series.id} style={{marginBottom:14}}>
+                          {/* Matchup label */}
+                          <div style={{display:'flex', alignItems:'center', gap:7, marginBottom:5}}>
+                            <span className={`conf conf-${series.conference}`}>{series.conference}</span>
+                            {series.topSeed != null && (
+                              <span className="xs mono muted">{series.topSeed} vs {series.bottomSeed}</span>
+                            )}
+                          </div>
+                          {[
+                            { team: series.top, count: pickTop },
+                            { team: series.bottom, count: pickBot }
+                          ].map(({ team, count }) => {
+                            const pct      = total ? Math.round((count / total) * 100) : 0;
+                            const isWinner = rs?.winner === team;
+                            const isPick1  = myPick1Winner === team && submitted;
+                            const isPick2  = myPick2Winner === team && submitted2;
+                            return (
+                              <div key={team} className="pr">
+                                <span style={{color: isWinner ? "var(--green)" : "var(--text2)"}}>
+                                  {team} {isWinner && "✓"}
+                                  {isPick1 && (
+                                    <span style={{fontSize:'0.6rem', color:'var(--gold)', fontFamily:"'JetBrains Mono',monospace", marginLeft:5, fontWeight:600}}>
+                                      ← {entry1Label}
+                                    </span>
+                                  )}
+                                  {isPick2 && (
+                                    <span style={{fontSize:'0.6rem', color:'var(--cyan)', fontFamily:"'JetBrains Mono',monospace", marginLeft: isPick1 ? 8 : 5, fontWeight:600}}>
+                                      ← {entry2Label}
+                                    </span>
+                                  )}
+                                </span>
+                                <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
+                                <span className="pct">{pct}%</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                        {[
-                          { team: series.top, count: pickTop },
-                          { team: series.bottom, count: pickBot }
-                        ].map(({ team, count }) => {
-                          const pct = total ? Math.round((count/total)*100) : 0;
-                          const isWinner = rs.winner === team;
-                          const isMyPick = myPickWinner === team;
-                          return (
-                            <div key={team} className="pr">
-                              <span style={{color: isWinner ? "var(--green)" : "var(--text2)"}}>
-                                {team} {isWinner && "✓"}
-                                {isMyPick && (
-                                  <span style={{fontSize:'0.6rem', color:'var(--gold)', fontFamily:"'JetBrains Mono',monospace", marginLeft:5, fontWeight:600}}>
-                                    ← your pick
-                                  </span>
-                                )}
-                              </span>
-                              <div className="pbw"><div className="pbi" style={{width:`${pct}%`}} /></div>
-                              <span className="pct">{pct}%</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="empty">
+                <h3>Stats Available After Lock</h3>
+                <p className="sm">Pool Stats populate once the admin locks picks</p>
+              </div>
+            )}
 
-            {completedCount === 0 && (
-              <div className="empty"><h3>No Results Yet</h3><p className="sm">Stats appear as series finish</p></div>
+            {picksLocked && completedCount === 0 && (
+              <div className="empty" style={{marginTop:0}}>
+                <h3>No Results Yet</h3>
+                <p className="sm">Winner data will appear as series complete</p>
+              </div>
             )}
           </div>
         )}
