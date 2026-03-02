@@ -1346,6 +1346,7 @@ export default function App() {
   const [toast,       setToast]       = useState("");
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
+  const [submitError, setSubmitError] = useState("");   // inline persistent error under submit row
   const [adminAuthed,  setAdminAuthed]  = useState(false);
   const [adminPass,    setAdminPass]    = useState("");
   const [picksLocked,  setPicksLocked]  = useState(false);
@@ -1431,19 +1432,32 @@ export default function App() {
 
   // ── Submit ──
   const handleSubmit = async () => {
+    setSubmitError(""); // clear any lingering inline error on every attempt
     const activeEmail = activeEntry === 1 ? myEmail.trim() : (myEmail2.trim() || myEmail.trim());
     if (!myName.trim()) return showToast("Please enter your name first");
     if (!activeEmail)   return showToast("Please enter your email address");
-    // Validate email format
+    // Validate email format — shown inline so it stays visible
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(activeEmail)) return showToast("Please enter a valid email address (e.g. you@email.com)");
-    if (!allPicked)     return showToast(`Complete all ${totalSeries} picks first`);
-    // Duplicate name guard — only for Entry 1 since Entry 2 shares the same Firebase key
+    if (!emailRegex.test(activeEmail)) {
+      setSubmitError("Please enter a valid email address (e.g. you@email.com)");
+      return;
+    }
+    if (!allPicked) return showToast(`Complete all ${totalSeries} picks first`);
+    // Duplicate name guard — shown inline; checks ALL existing participant keys, not just prevKey
     if (activeEntry === 1) {
-      const key = sanitize(myName.trim());
+      const key    = sanitize(myName.trim());
       const prevKey = sanitize(localStorage.getItem("pool_name") || "");
-      if (key !== prevKey && participants[key]) {
-        return showToast(`"${myName.trim()}" is already taken — please choose a different name`);
+      // Allow updating your own entry (prevKey matches) but block any other collision
+      const takenByOther = key !== prevKey && !!participants[key];
+      // Also catch display-name collisions: scan all participant names for an exact-match
+      // (covers edge cases where sanitize() maps two different strings to the same key)
+      const nameLower = myName.trim().toLowerCase();
+      const takenByName = key !== prevKey && Object.values(participants).some(
+        p => (p.name || "").trim().toLowerCase() === nameLower
+      );
+      if (takenByOther || takenByName) {
+        setSubmitError(`"${myName.trim()}" is already taken — please choose a different name`);
+        return;
       }
     }
     setSaving(true);
@@ -1481,6 +1495,7 @@ export default function App() {
         localStorage.setItem("pool_email_2", myEmail2.trim());
         setSubmitted2(true);
       }
+      setSubmitError(""); // clear any stale inline error on successful save
       showToast(activeEntry === 1 ? "🏆 Entry 1 submitted! Now fill out Entry 2 below." : "🏆 Entry 2 submitted!");
     } catch (e) {
       showToast("Error saving — check Firebase config");
@@ -1762,6 +1777,14 @@ export default function App() {
                     </span>
                 }
               </div>
+              {submitError && (
+                <div style={{
+                  color:'var(--red)', fontSize:'0.76rem', fontWeight:600,
+                  marginTop:10, display:'flex', alignItems:'center', gap:5
+                }}>
+                  ⚠ {submitError}
+                </div>
+              )}
             </div>
           </div>
         )}
