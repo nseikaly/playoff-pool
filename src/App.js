@@ -41,6 +41,17 @@ const css = `
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--gold); border-bottom-color:var(--gold); }
 
+  /* Entry toggle (dual-entry pick switcher) */
+  .entry-toggle { display:flex; gap:0; margin-bottom:18px; border:1px solid var(--border);
+    border-radius:8px; overflow:hidden; width:fit-content; }
+  .entry-btn { padding:8px 22px; background:transparent; border:none; cursor:pointer;
+    color:var(--text2); font-size:0.72rem; font-weight:700; letter-spacing:0.8px;
+    font-family:'Bebas Neue',sans-serif; transition:all 0.15s; white-space:nowrap; }
+  .entry-btn:not(:last-child) { border-right:1px solid var(--border); }
+  .entry-btn.active { background:var(--gold); color:#111; }
+  .entry-btn .entry-check { margin-left:5px; font-size:0.65rem; }
+  .entry-btn.active .entry-check { color:#111; }
+
   /* Legend */
   .legend { display:flex; gap:20px; flex-wrap:wrap; padding:11px 16px; background:var(--surface2);
     border:1px solid var(--border); border-radius:6px; margin-bottom:22px; }
@@ -573,7 +584,7 @@ function SeriesCard({ series, round, picks, onPick, readOnly, adminMode, results
   const hasPick = pick.winner && pick.games;
 
   return (
-    <div className={`sc ${settled ? "done" : ""}`} style={settled ? {borderLeft:`3px solid ${confBorderColor}`} : {}}>
+    <div className={`sc ${settled ? "done" : ""}`} style={settled ? {border:`2px solid ${confBorderColor}`, boxShadow:`0 0 10px ${confBorderColor}33`} : {}}>
       <div className="sc-top">
         <div style={{display:"flex", alignItems:"center", gap:"7px"}}>
           <span className={`conf conf-${series.conference}`}>{series.conference}</span>
@@ -715,7 +726,7 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
     : 'var(--gold2)';
 
   return (
-    <div className={`bm ${settled ? "done" : ""}`} style={settled ? {borderLeft:`3px solid ${confBorderColor}`} : {}}>
+    <div className={`bm ${settled ? "done" : ""}`} style={settled ? {border:`2px solid ${confBorderColor}`, boxShadow:`0 0 10px ${confBorderColor}33`} : {}}>
       <div className="bm-hdr">
         <span className={`bm-conf ${series.conference}`}>{series.conference}</span>
         {settled && (
@@ -773,7 +784,7 @@ const BK = {
   CONF_GAP:      44,  // vertical gap between East and West conference blocks
   CONF_LABEL_H:  22,  // height reserved above each conference R1 block for "EAST"/"WEST" label
   COL_GAP:       24,  // horizontal connector zone width between card columns
-  HDR_H:         40,  // round header row height above bracket
+  HDR_H:         54,  // round header row height above bracket
 };
 
 // Given an array of source-card top-px, return centered top-px for each parent (per consecutive pair)
@@ -1289,9 +1300,12 @@ export default function App() {
   const [results,   setResults]   = useState(null);       // from Firebase
   const [participants, setParticipants] = useState({});   // from Firebase
   const [myPicks,   setMyPicks]   = useState({});
+  const [myPicks2,  setMyPicks2]  = useState({});       // Entry 2 picks (local edit)
+  const [activeEntry, setActiveEntry] = useState(1);   // 1 or 2 — which entry the user is editing
   const [myName,    setMyName]    = useState(() => localStorage.getItem("pool_name") || "");
   const [myEmail,   setMyEmail]   = useState("");
   const [submitted, setSubmitted] = useState(() => localStorage.getItem("pool_submitted") === "1");
+  const [submitted2, setSubmitted2] = useState(() => localStorage.getItem("pool_submitted_2") === "1");
   const [toast,       setToast]       = useState("");
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
@@ -1336,13 +1350,16 @@ export default function App() {
       setPicksLocked(snap.exists() ? snap.val() : false);
     });
 
-    // Load my own saved picks
+    // Load my own saved picks (entry 1 and entry 2)
     const savedName = localStorage.getItem("pool_name");
     if (savedName) {
       const unsubMe = onValue(ref(db, `participants/${sanitize(savedName)}/picks`), snap => {
         if (snap.exists()) setMyPicks(snap.val());
       });
-      return () => { unsubResults(); unsubParticipants(); unsubLock(); unsubMe(); };
+      const unsubMe2 = onValue(ref(db, `participants/${sanitize(savedName)}/picks2`), snap => {
+        if (snap.exists()) setMyPicks2(snap.val());
+      });
+      return () => { unsubResults(); unsubParticipants(); unsubLock(); unsubMe(); unsubMe2(); };
     }
 
     return () => { unsubResults(); unsubParticipants(); unsubLock(); };
@@ -1358,11 +1375,20 @@ export default function App() {
   function sanitize(name) { return name.trim().toLowerCase().replace(/[^a-z0-9]/g, "_"); }
 
   // ── Picks ──
-  const handlePick = (seriesId, pick) =>
-    setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+  // activePicks = whichever entry the user is currently editing
+  const activePicks    = activeEntry === 1 ? myPicks : myPicks2;
+  const isSubmitted    = activeEntry === 1 ? submitted : submitted2;
+
+  const handlePick = (seriesId, pick) => {
+    if (activeEntry === 1) {
+      setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+    } else {
+      setMyPicks2(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+    }
+  };
 
   const totalSeries  = BRACKET_CONFIG.rounds.flatMap(r => r.series).length;
-  const pickedCount  = Object.values(myPicks).filter(p => p.winner && p.games).length;
+  const pickedCount  = Object.values(activePicks).filter(p => p.winner && p.games).length;
   const allPicked    = pickedCount === totalSeries;
 
   // ── Submit ──
@@ -1373,16 +1399,30 @@ export default function App() {
     setSaving(true);
     try {
       const key = sanitize(myName);
-      await set(ref(db, `participants/${key}`), {
-        name:        myName.trim(),
-        email:       myEmail.trim(),
-        picks:       myPicks,
-        submittedAt: Date.now(),
-      });
-      localStorage.setItem("pool_name", myName.trim());
-      localStorage.setItem("pool_submitted", "1");
-      setSubmitted(true);
-      showToast("🏆 Picks submitted!");
+      if (activeEntry === 1) {
+        // Entry 1: use set() to create/overwrite the whole record, preserving any existing entry 2
+        await set(ref(db, `participants/${key}`), {
+          name:        myName.trim(),
+          email:       myEmail.trim(),
+          picks:       myPicks,
+          submittedAt: Date.now(),
+          // Preserve entry 2 data if it already exists
+          ...(participants[key]?.picks2        ? { picks2:        participants[key].picks2        } : {}),
+          ...(participants[key]?.submittedAt2  ? { submittedAt2:  participants[key].submittedAt2  } : {}),
+        });
+        localStorage.setItem("pool_name",      myName.trim());
+        localStorage.setItem("pool_submitted", "1");
+        setSubmitted(true);
+      } else {
+        // Entry 2: use update() so we never overwrite entry 1 picks
+        await update(ref(db), {
+          [`participants/${key}/picks2`]:       myPicks2,
+          [`participants/${key}/submittedAt2`]: Date.now(),
+        });
+        localStorage.setItem("pool_submitted_2", "1");
+        setSubmitted2(true);
+      }
+      showToast(activeEntry === 1 ? "🏆 Entry 1 submitted!" : "🏆 Entry 2 submitted!");
       setTab("leaderboard");
     } catch (e) {
       showToast("Error saving — check Firebase config");
@@ -1498,9 +1538,18 @@ export default function App() {
   };
 
   // ── Leaderboard ──
-  const leaderboard = buildLeaderboard(participants, results);
-  const topPts      = leaderboard[0]?.points || 1;
+  // Flatten participants to include both entries for multi-entry users.
+  // Entry 2 rows use key "{key}__2" so buildLeaderboard scores them separately.
   const myKey       = sanitize(myName);
+  const flatParticipants = {};
+  Object.entries(participants).forEach(([key, p]) => {
+    flatParticipants[key] = p;
+    if (p.picks2 && Object.keys(p.picks2).length > 0) {
+      flatParticipants[key + '__2'] = { ...p, picks: p.picks2 };
+    }
+  });
+  const leaderboard = buildLeaderboard(flatParticipants, results);
+  const topPts      = leaderboard[0]?.points || 1;
   const eliminatedTeams = getEliminatedTeams(results);
 
   // ── Pool stats ──
@@ -1510,7 +1559,7 @@ export default function App() {
 
   // ── Scenario ──
   const scenarioResults     = buildScenarioResults(results, scenarioPicks);
-  const scenarioLeaderboard = buildLeaderboard(participants, scenarioResults);
+  const scenarioLeaderboard = buildLeaderboard(flatParticipants, scenarioResults);
 
   // ── Admin: resolve bracket using actual results so later rounds show real team names ──
   const resultsAsPicks = {};
@@ -1549,7 +1598,7 @@ export default function App() {
         <div className="tabs">
           {[
             { id:"picks",       label:"My Picks" },
-            { id:"leaderboard", label:`Leaderboard (${Object.keys(participants).length})` },
+            { id:"leaderboard", label:`Leaderboard (${leaderboard.length})` },
             { id:"scenario",    label:"Scenario" },
             { id:"stats",       label:"Pool Stats" },
             { id:"admin",       label:"⚙ Admin" },
@@ -1562,7 +1611,15 @@ export default function App() {
         {tab === "picks" && (
           <div>
             <div className="row between mb16" style={{alignItems:'flex-start', gap:12}}>
-              <div style={{flex:1}} />
+              {/* Entry toggle — switch between Entry 1 and Entry 2 */}
+              <div className="entry-toggle">
+                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
+                  Entry 1{submitted && <span className="entry-check">✓</span>}
+                </button>
+                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
+                  Entry 2{submitted2 && <span className="entry-check">✓</span>}
+                </button>
+              </div>
               <button className="info-btn" onClick={() => setInfoOpen(true)}>
                 <span className="info-btn-icon">ℹ</span> How to Play
               </button>
@@ -1586,16 +1643,16 @@ export default function App() {
               </div>
             )}
 
-            {!picksLocked && submitted && (
+            {!picksLocked && isSubmitted && (
               <div className="alert alert-success mb16">
-                ✓ Picks submitted as <strong>{myName}</strong>. You can update and resubmit any time before the deadline.
+                ✓ Entry {activeEntry} submitted as <strong>{myName}</strong>. You can update and resubmit any time before the deadline.
               </div>
             )}
 
-            <BracketView picks={myPicks} onPick={handlePick} readOnly={picksLocked} results={results} />
+            <BracketView picks={activePicks} onPick={handlePick} readOnly={picksLocked} results={results} />
 
             {/* Submit */}
-            <div className="sec" style={{marginTop:30}}>Submit Your Picks</div>
+            <div className="sec" style={{marginTop:30}}>Submit Entry {activeEntry}</div>
             <div className="form">
               <div className="g2">
                 <div>
@@ -1609,7 +1666,7 @@ export default function App() {
               </div>
               <div className="row gap8 wrap">
                 <button className="btn btn-gold" onClick={handleSubmit} disabled={!allPicked || !myName.trim() || !myEmail.trim() || saving || picksLocked}>
-                  {saving ? "Saving…" : submitted ? "Update Picks" : "Submit Picks"}
+                  {saving ? "Saving…" : isSubmitted ? `Update Entry ${activeEntry}` : `Submit Entry ${activeEntry}`}
                 </button>
                 <button className="btn btn-ghost" onClick={() => window.print()} title="Print your picks bracket">
                   🖨 Print Picks
@@ -1651,8 +1708,12 @@ export default function App() {
             ) : (
               <div className="lb">
                 {leaderboard.map((p, i) => {
-                  const isMe = sanitize(p.name || "") === myKey;
+                  // Entry 2 rows have id ending in "__2"; derive the base key + isMe for both entries
+                  const isEntry2 = p.id?.endsWith('__2');
+                  const baseKey  = isEntry2 ? p.id.slice(0, -3) : p.id;
+                  const isMe     = baseKey === myKey;
                   const rankClass = isMe ? "me" : "";
+                  const displayName = isEntry2 ? `${p.name} (2)` : p.name;
                   const canView = picksLocked && p.picks && Object.keys(p.picks).length > 0;
                   const finalsWinner = picksLocked ? (p.picks?.s15?.winner || null) : null;
                   // Shorten long team names to just the nickname (last word)
@@ -1668,7 +1729,7 @@ export default function App() {
                       <div className="rank">{i + 1}</div>
                       <div>
                         <div className="lbn">
-                          {p.name} {isMe && <span className="lbn-you">( you )</span>}
+                          {displayName} {isMe && <span className="lbn-you">( you )</span>}
                         </div>
                         <div className="pb">
                           <div className="pbf" style={{width:`${topPts ? (p.points/topPts)*100 : 0}%`}} />
@@ -1739,7 +1800,7 @@ export default function App() {
                     <div className="xs muted mt8">Pick hypothetical outcomes for remaining series · see how standings would shift</div>
                   </div>
                   <div className="row gap8" style={{flexWrap:'wrap'}}>
-                    <button className="btn btn-ghost" style={{fontSize:"0.72rem"}} onClick={handleScenarioAutoFill}>↺ Auto-fill My Picks</button>
+                    <button className="btn btn-gold" style={{fontSize:"0.72rem"}} onClick={handleScenarioAutoFill}>↺ Auto-fill My Picks</button>
                     <button className="btn btn-danger" style={{fontSize:"0.72rem"}} onClick={handleScenarioClear}>✕ Clear Scenario</button>
                     <button className="info-btn" onClick={() => setInfoOpen(true)}>
                       <span className="info-btn-icon">ℹ</span> Guide
@@ -1755,7 +1816,10 @@ export default function App() {
                     </div>
                     <div style={{marginTop:8}}>
                       {scenarioLeaderboard.map((p, i) => {
-                        const isMe = sanitize(p.name || "") === myKey;
+                        const isEntry2Sc = p.id?.endsWith('__2');
+                        const baseKeySc  = isEntry2Sc ? p.id.slice(0, -3) : p.id;
+                        const isMe = baseKeySc === myKey;
+                        const displayNameSc = isEntry2Sc ? `${p.name} (2)` : p.name;
                         const baseEntry = leaderboard.find(b => b.id === p.id);
                         const delta = p.points - (baseEntry?.points || 0);
                         return (
@@ -1763,7 +1827,7 @@ export default function App() {
                             <div className="scenario-rank">{i + 1}</div>
                             <div style={{minWidth:0}}>
                               <div className="scenario-name">
-                                {p.name}
+                                {displayNameSc}
                                 {isMe && <span style={{color:'var(--gold)', marginLeft:4, fontSize:'0.62rem'}}>(you)</span>}
                               </div>
                               {delta !== 0 && (
@@ -1792,9 +1856,9 @@ export default function App() {
                         results={results}
                         scenarioMode={true}
                         myPicksForScenario={
-                          Object.keys(myPicks).length > 0
-                            ? myPicks
-                            : (participants[myKey]?.picks || {})
+                          Object.keys(activePicks).length > 0
+                            ? activePicks
+                            : (participants[myKey]?.[activeEntry === 1 ? 'picks' : 'picks2'] || {})
                         }
                         onScenarioPick={handleScenarioPick}
                       />
@@ -1819,7 +1883,7 @@ export default function App() {
               </button>
             </div>
             <div className="sg">
-              <div className="sc2"><div className="sv">{Object.keys(participants).length}</div><div className="sl">Participants</div></div>
+              <div className="sc2"><div className="sv">{leaderboard.length}</div><div className="sl">Entries</div></div>
               <div className="sc2"><div className="sv">{completedCount}</div><div className="sl">Series Complete</div></div>
               <div className="sc2"><div className="sv">{leaderboard[0]?.points || 0}</div><div className="sl">Top Score</div></div>
               <div className="sc2">
@@ -1840,10 +1904,18 @@ export default function App() {
                   {round.series.map((series) => {
                     const rs = getAdminResultForSeries(results, series.id);
                     if (!rs?.winner) return null;
-                    const total = Object.keys(participants).length;
-                    const pickTop = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.top).length;
-                    const pickBot = Object.values(participants).filter(p => p.picks?.[series.id]?.winner === series.bottom).length;
-                    const myPickWinner = myPicks?.[series.id]?.winner;
+                    // Count all pick entries (including entry 2 for multi-entry participants)
+                    const allEntries = Object.values(participants).flatMap(p => {
+                      const entries = [];
+                      if (p.picks  && Object.keys(p.picks ).length > 0) entries.push(p.picks);
+                      if (p.picks2 && Object.keys(p.picks2).length > 0) entries.push(p.picks2);
+                      return entries;
+                    });
+                    const total   = allEntries.length;
+                    const pickTop = allEntries.filter(picks => picks[series.id]?.winner === series.top).length;
+                    const pickBot = allEntries.filter(picks => picks[series.id]?.winner === series.bottom).length;
+                    // Show "(your pick)" for the currently active entry
+                    const myPickWinner = activePicks?.[series.id]?.winner;
 
                     return (
                       <div key={series.id} style={{marginBottom:14}}>
