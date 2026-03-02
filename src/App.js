@@ -33,8 +33,7 @@ const css = `
   .hdr-sub { font-size:0.68rem; letter-spacing:3px; color:var(--text2); text-transform:uppercase; margin-top:4px; }
   .live-dot { width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  @keyframes spin-ball { from { transform:perspective(300px) rotateY(0deg); } to { transform:perspective(300px) rotateY(360deg); } }
-  .spin-ball { display:inline-flex; width:1em; height:1em; align-items:center; justify-content:center; animation:spin-ball 1.6s linear infinite; margin-right:6px; vertical-align:middle; }
+  .ball-icon { display:inline-block; width:2.3rem; height:2.3rem; margin-right:8px; vertical-align:middle; object-fit:contain; }
 
   /* Gold tint on native date/time picker icons */
   input[type="date"]::-webkit-calendar-picker-indicator,
@@ -1805,7 +1804,7 @@ export default function App() {
         {/* ── Header ── */}
         <div className="hdr">
           <div>
-            <div className="hdr-title"><span className="spin-ball">🏀</span>{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</div>
+            <div className="hdr-title"><img src="/basketball.svg" alt="" className="ball-icon" />{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</div>
             <div className="hdr-sub">2026 NBA Playoffs · Built & Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
           </div>
           <div className="row gap8">
@@ -2217,9 +2216,9 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {[{conf:"West",teams:statsWest},{conf:"East",teams:statsEast}].map(({conf,teams}) =>
+                          {[{conf:"East",teams:statsEast},{conf:"West",teams:statsWest}].map(({conf,teams}) =>
                             teams.map((t, idx) => {
-                              const sep = conf === "East" && idx === 0;
+                              const sep = conf === "West" && idx === 0;
                               const r = [0,1,2,3].map(ri => {
                                 const count = statsCount(t.team, ri, t.r1Id);
                                 const pct   = statsTotalEntries > 0 ? count / statsTotalEntries * 100 : 0;
