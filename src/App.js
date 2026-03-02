@@ -1804,10 +1804,10 @@ export default function App() {
         {/* ── Header ── */}
         <div className="hdr">
           <div>
-            <div className="hdr-title" style={{display:'flex',alignItems:'center'}}>
+            <div className="hdr-title">
               <img src="/basketball.png" alt="" aria-hidden="true"
-                style={{width:'2.4rem',height:'2.4rem',marginRight:'16px',flexShrink:0,objectFit:'contain'}} />
-              <span>{BRACKET_CONFIG.sport} <span>Playoff</span> Pool</span>
+                style={{width:'2.4rem',height:'2.4rem',marginRight:'16px',verticalAlign:'middle',objectFit:'contain',position:'relative',top:'-2px'}} />
+              {BRACKET_CONFIG.sport} <span>Playoff</span> Pool
             </div>
             <div className="hdr-sub">2026 NBA Playoffs · Built & Run by <span style={{color:'var(--gold)', fontWeight:600}}>Nicholas Seikaly</span></div>
           </div>
