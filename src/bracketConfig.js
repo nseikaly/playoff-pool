@@ -60,3 +60,31 @@ export const GAME_OPTIONS = [4, 5, 6, 7];
 export const MAX_POINTS = BRACKET_CONFIG.rounds.reduce((acc, r) =>
   acc + r.series.length * (r.winnerPoints + r.gamesPoints), 0
 );
+
+// ─── Play-In Tournament Config ────────────────────────────────────────────────
+// The four teams that compete in the Play-In to determine the #7 and #8 seeds.
+// seed7/seed8 are already seeded into the main bracket; the play-in decides
+// whether they keep those slots or are replaced by seed9/seed10.
+export const PLAY_IN_CONFIG = {
+  East: {
+    seed7:  "Indiana Pacers",
+    seed8:  "Miami Heat",
+    seed9:  "Chicago Bulls",
+    seed10: "Detroit Pistons",
+  },
+  West: {
+    seed7:  "LA Lakers",
+    seed8:  "New Orleans Pelicans",
+    seed9:  "San Antonio Spurs",
+    seed10: "Sacramento Kings",
+  },
+};
+
+// Maps each play-in seed slot to the R1 series + slot it fills.
+// The #7 and #8 seeds always occupy the "bottom" slot in their respective R1 matchups.
+export const PLAY_IN_SLOTS = {
+  E7: "s2",  // East #2 (Milwaukee Bucks) vs East #7 seed
+  E8: "s1",  // East #1 (Boston Celtics)  vs East #8 seed
+  W7: "s6",  // West #2 (Denver Nuggets)  vs West #7 seed
+  W8: "s5",  // West #1 (OKC Thunder)     vs West #8 seed
+};
