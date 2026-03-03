@@ -683,7 +683,11 @@ function resolveBracket(picks) {
 // chosen team no longer appears in that slot (e.g. the user changed their R1
 // pick so R2 now shows a different team). Runs up to 3 passes to cascade all
 // the way from R2 → R3 → R4 in one call.
-function cleanDownstreamPicks(picks, basePicks = {}) {
+//
+// playInSeeds (optional): { E7, E8, W7, W8 } — when provided, the four R1
+// play-in slots are patched with the actual/predicted teams before validating,
+// so a pick of e.g. "Chicago Bulls" in s1 is valid when CHI is the effective E8.
+function cleanDownstreamPicks(picks, basePicks = {}, playInSeeds = null) {
   let cleaned = picks;
   for (let pass = 0; pass < 3; pass++) {
     // Merge admin-settled results (basePicks) so resolveBracket can substitute
@@ -694,8 +698,11 @@ function cleanDownstreamPicks(picks, basePicks = {}) {
       for (const series of round.series) {
         // Never clear a pick for a series that admin has already settled.
         if (basePicks[series.id]) continue;
+        // Apply play-in patch so play-in teams (e.g. CHI as E8 in s1) are
+        // treated as valid rather than being erroneously cleared.
+        const effectiveSeries = playInSeeds ? applyPlayInPatch(series, playInSeeds) : series;
         const pick = cleaned[series.id];
-        if (pick?.winner && pick.winner !== series.top && pick.winner !== series.bottom) {
+        if (pick?.winner && pick.winner !== effectiveSeries.top && pick.winner !== effectiveSeries.bottom) {
           cleaned = { ...cleaned, [series.id]: { ...pick, winner: undefined } };
         }
       }
@@ -972,6 +979,29 @@ function nextRoundTops(srcTops, cardH) {
   return out;
 }
 
+// Virtual-clean picks for DISPLAY only: if admin/participant has confirmed a
+// play-in team for a slot and the stored pick references a DIFFERENT team (one
+// that no longer occupies that slot), clear it and cascade.
+// This does NOT modify stored data — it is only used when rendering the bracket.
+function virtualCleanPicksForPlayIn(picks, playInSeeds) {
+  if (!playInSeeds) return picks;
+  let cleaned = { ...picks };
+  Object.entries(PI_SLOT_MAP).forEach(([sid, seedKey]) => {
+    const actualBottom = playInSeeds[seedKey];
+    if (!actualBottom) return; // play-in result not yet known for this slot
+    const r1Series = BRACKET_CONFIG.rounds[0].series.find(s => s.id === sid);
+    if (!r1Series) return;
+    const topTeam = r1Series.top;
+    const pick = cleaned[sid];
+    // If winner is neither the confirmed top seed nor the confirmed play-in team, clear it
+    if (pick?.winner && pick.winner !== topTeam && pick.winner !== actualBottom) {
+      cleaned = { ...cleaned, [sid]: { ...pick, winner: undefined, games: undefined } };
+    }
+  });
+  // Cascade: clear any downstream picks that now reference a team no longer present
+  return cleanDownstreamPicks(cleaned, {}, playInSeeds);
+}
+
 function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksForScenario, onScenarioPick, playInSeeds }) {
   // Measure the container width so cards stretch to fill it
   const containerRef = useRef(null);
@@ -1024,9 +1054,15 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
 
   // ── Series/round lookup ───────────────────────────────────────────────────
   // In scenario mode, resolve team names using: admin results > scenario picks > my picks
+  // In normal mode, apply a display-only virtual clean so that if admin has
+  // finalized a play-in result, any stored picks referencing the wrong team are
+  // stripped before resolveBracket propagates them into later rounds.
+  const effectivePicks = (!scenarioMode && playInSeeds)
+    ? virtualCleanPicksForPlayIn(picks || {}, playInSeeds)
+    : (picks || {});
   const resolveSource = scenarioMode
     ? resolveForScenario(myPicksForScenario || {}, picks || {}, results)
-    : (picks || {});
+    : effectivePicks;
   const resolvedRounds = resolveBracket(resolveSource);
   const seriesMap = {}, roundMap = {};
   resolvedRounds.forEach(round => round.series.forEach(s => {
@@ -1365,13 +1401,13 @@ function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, on
                 const tname = teams[idx];
                 const seed  = seedNums ? seedNums[idx] : (TEAM_SEEDS[tname] ?? "");
                 const isW   = effectiveW === tname;
-                const isL   = effectiveW && effectiveW !== tname;
                 let cls = "";
-                if (settled)       cls = isW ? "pi-ok" : "pi-wrong";
+                if (settled)        cls = isW ? "pi-ok" : "pi-wrong";
                 else if (game.pick) cls = isW ? "pi-sel" : "";
                 return (
                   <button key={tname}
                     className={`pi-team ${cls}`}
+                    style={{gridColumn: idx === 0 ? '1' : '3'}}
                     onClick={() => canPick && onPick(game.id, tname)}
                     disabled={settled || !canPick}
                   >
@@ -1769,10 +1805,14 @@ export default function App() {
   const isSubmitted    = activeEntry === 1 ? submitted : submitted2;
 
   const handlePick = (seriesId, pick) => {
+    // Compute current effective play-in seeds so cleanDownstreamPicks knows
+    // which play-in teams are valid in s1/s2/s5/s6 and doesn't clear them.
+    const piSrc   = activeEntry === 1 ? playInPicks : playInPicks2;
+    const piSeeds = resolveEffectiveSeeds(piSrc, playInResults);
     if (activeEntry === 1) {
-      setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+      setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, {}, piSeeds));
     } else {
-      setMyPicks2(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }));
+      setMyPicks2(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, {}, piSeeds));
     }
   };
 
