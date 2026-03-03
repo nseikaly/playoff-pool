@@ -20,6 +20,11 @@ const TEAMS = {
   "Phoenix Suns":           { abbr:"PHX", primary:"#1D1160", secondary:"#E56020" },
   "LA Clippers":            { abbr:"LAC", primary:"#C8102E", secondary:"#BEC0C2" },
   "Dallas Mavericks":       { abbr:"DAL", primary:"#00538C", secondary:"#B8C4CA" },
+  // ── Play-In teams (seeds 9 & 10) ──────────────────────────────────────────
+  "Chicago Bulls":          { abbr:"CHI", primary:"#CE1141", secondary:"#FFFFFF" },
+  "Detroit Pistons":        { abbr:"DET", primary:"#006BB6", secondary:"#C8102E" },
+  "San Antonio Spurs":      { abbr:"SAS", primary:"#000000", secondary:"#C4CED4" },
+  "Sacramento Kings":       { abbr:"SAC", primary:"#5A2D81", secondary:"#63727A" },
 };
 
 // Returns { primary, secondary } for a team name, with a dark fallback for TBD teams.
