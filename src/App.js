@@ -183,9 +183,12 @@ const css = `
   /* Play-In TBD slot inside bracket matchup card */
   .bm-team-pi-tbd { justify-content:center; gap:4px; min-height:42px;
     border-style:dashed !important; border-color:rgba(201,168,76,0.3) !important;
-    background:rgba(201,168,76,0.04) !important; cursor:default !important; }
+    background:rgba(201,168,76,0.04) !important; cursor:pointer !important; }
+  .bm-team-pi-tbd:hover { border-color:rgba(201,168,76,0.65) !important;
+    background:rgba(201,168,76,0.1) !important; }
   .bm-team-pi-tbd-text { font-size:0.6rem; color:var(--gold); letter-spacing:0.8px;
     font-weight:700; opacity:0.7; }
+  .bm-team-pi-tbd:hover .bm-team-pi-tbd-text { opacity:1; }
 
   /* Tabs */
   .tabs { display:flex; border-bottom:1px solid var(--border); margin:20px 0 28px; }
@@ -979,27 +982,68 @@ function nextRoundTops(srcTops, cardH) {
   return out;
 }
 
-// Virtual-clean picks for DISPLAY only: if admin/participant has confirmed a
-// play-in team for a slot and the stored pick references a DIFFERENT team (one
-// that no longer occupies that slot), clear it and cascade.
+// Virtual-substitute picks for DISPLAY only: if admin/participant has confirmed
+// a play-in team for a slot and the stored pick references a DIFFERENT team,
+// replace that team with the actual play-in winner everywhere it appears in
+// later rounds (only where it is no longer a valid team in that series).
 // This does NOT modify stored data — it is only used when rendering the bracket.
-function virtualCleanPicksForPlayIn(picks, playInSeeds) {
+function virtualSubstitutePicksForPlayIn(picks, playInSeeds) {
   if (!playInSeeds) return picks;
-  let cleaned = { ...picks };
+  let result = { ...picks };
+
+  // Step 1: Fix R1 play-in slots and record which teams need substitution.
+  // subs maps: wrongTeam → actualPlayInWinner
+  const subs = {};
   Object.entries(PI_SLOT_MAP).forEach(([sid, seedKey]) => {
     const actualBottom = playInSeeds[seedKey];
     if (!actualBottom) return; // play-in result not yet known for this slot
     const r1Series = BRACKET_CONFIG.rounds[0].series.find(s => s.id === sid);
     if (!r1Series) return;
     const topTeam = r1Series.top;
-    const pick = cleaned[sid];
-    // If winner is neither the confirmed top seed nor the confirmed play-in team, clear it
+    const pick = result[sid];
     if (pick?.winner && pick.winner !== topTeam && pick.winner !== actualBottom) {
-      cleaned = { ...cleaned, [sid]: { ...pick, winner: undefined, games: undefined } };
+      // Participant picked a team that is no longer in this slot — substitute
+      subs[pick.winner] = actualBottom;
+      result = { ...result, [sid]: { ...pick, winner: actualBottom } };
     }
   });
-  // Cascade: clear any downstream picks that now reference a team no longer present
-  return cleanDownstreamPicks(cleaned, {}, playInSeeds);
+
+  if (Object.keys(subs).length === 0) return result;
+
+  // Step 2: Walk later rounds in order (R2 → R3 → Finals), substituting the
+  // old team with the new team ONLY where the old team is no longer available
+  // in that series (it may still be valid via a different upstream slot).
+  // Repeat up to 3 passes so that each level of the bracket gets corrected
+  // using the already-fixed upstream level.
+  for (let pass = 0; pass < 3; pass++) {
+    // Resolve the bracket using the latest corrected picks to see what teams
+    // are actually available in each later-round series.
+    const resolved = resolveBracket(result);
+    const seriesMap = {};
+    resolved.forEach(round => round.series.forEach(s => { seriesMap[s.id] = s; }));
+
+    let changed = false;
+    const nextResult = { ...result };
+
+    Object.entries(result).forEach(([sid, pick]) => {
+      if (!pick?.winner) return;
+      const newTeam = subs[pick.winner];
+      if (!newTeam) return; // this team doesn't need substitution
+      const series = seriesMap[sid];
+      if (!series) return;
+      // Only substitute if the old team is NOT present in this series.
+      // If it's still present (came from a different play-in slot), leave it.
+      if (series.top !== pick.winner && series.bottom !== pick.winner) {
+        nextResult[sid] = { ...pick, winner: newTeam };
+        changed = true;
+      }
+    });
+
+    result = nextResult;
+    if (!changed) break;
+  }
+
+  return result;
 }
 
 function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksForScenario, onScenarioPick, playInSeeds }) {
@@ -1058,7 +1102,7 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
   // finalized a play-in result, any stored picks referencing the wrong team are
   // stripped before resolveBracket propagates them into later rounds.
   const effectivePicks = (!scenarioMode && playInSeeds)
-    ? virtualCleanPicksForPlayIn(picks || {}, playInSeeds)
+    ? virtualSubstitutePicksForPlayIn(picks || {}, playInSeeds)
     : (picks || {});
   const resolveSource = scenarioMode
     ? resolveForScenario(myPicksForScenario || {}, picks || {}, results)
@@ -1810,9 +1854,19 @@ export default function App() {
     const piSrc   = activeEntry === 1 ? playInPicks : playInPicks2;
     const piSeeds = resolveEffectiveSeeds(piSrc, playInResults);
     if (activeEntry === 1) {
-      setMyPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, {}, piSeeds));
+      setMyPicks(prev => {
+        // Substitute any stale play-in teams with confirmed winners before
+        // cleaning, so cleanDownstreamPicks replaces them rather than clearing them.
+        const next = { ...prev, [seriesId]: pick };
+        const substituted = piSeeds ? virtualSubstitutePicksForPlayIn(next, piSeeds) : next;
+        return cleanDownstreamPicks(substituted, {}, piSeeds);
+      });
     } else {
-      setMyPicks2(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, {}, piSeeds));
+      setMyPicks2(prev => {
+        const next = { ...prev, [seriesId]: pick };
+        const substituted = piSeeds ? virtualSubstitutePicksForPlayIn(next, piSeeds) : next;
+        return cleanDownstreamPicks(substituted, {}, piSeeds);
+      });
     }
   };
 
@@ -2109,9 +2163,16 @@ export default function App() {
   const myKey       = sanitize(myName);
   const flatParticipants = {};
   Object.entries(participants).forEach(([key, p]) => {
-    flatParticipants[key] = p;
+    // Apply play-in substitutions so scoring reflects confirmed play-in winners
+    // even when stored picks still reference the displaced team (e.g. "LA Lakers"
+    // stored as W7 pick but actual W7 = "New Orleans Pelicans").
+    const piSeeds1 = resolveEffectiveSeeds(p.playInPicks  || {}, playInResults);
+    const piSeeds2 = resolveEffectiveSeeds(p.playInPicks2 || {}, playInResults);
+    const subPicks1 = virtualSubstitutePicksForPlayIn(p.picks  || {}, piSeeds1);
+    flatParticipants[key] = { ...p, picks: subPicks1 };
     if (p.picks2 && Object.keys(p.picks2).length > 0) {
-      flatParticipants[key + '__2'] = { ...p, picks: p.picks2 };
+      const subPicks2 = virtualSubstitutePicksForPlayIn(p.picks2, piSeeds2);
+      flatParticipants[key + '__2'] = { ...p, picks: subPicks2 };
     }
   });
   const leaderboard = buildLeaderboard(flatParticipants, results);
