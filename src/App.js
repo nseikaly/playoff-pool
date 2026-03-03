@@ -53,12 +53,20 @@ function resolveEffectiveSeeds(participantPicks, adminResults) {
   ["piE1","piE2","piE3","piW1","piW2","piW3"].forEach(k => {
     eff[k] = adminResults?.[k] || participantPicks?.[k] || null;
   });
-  return {
+  const out = {
     E7: eff.piE1 || null,
     E8: eff.piE3 || null,
     W7: eff.piW1 || null,
     W8: eff.piW3 || null,
   };
+  // Warn if admin/participant data produced identical teams for 7 & 8 seeds
+  if (out.E7 && out.E8 && out.E7 === out.E8) {
+    console.warn("resolveEffectiveSeeds: East seeds 7 and 8 are the same team", out.E7);
+  }
+  if (out.W7 && out.W8 && out.W7 === out.W8) {
+    console.warn("resolveEffectiveSeeds: West seeds 7 and 8 are the same team", out.W7);
+  }
+  return out;
 }
 
 // Applies play-in seed overrides to an R1 series.
@@ -1783,6 +1791,26 @@ export default function App() {
   const [playInPicks2,  setPlayInPicks2]  = useState({});  // entry 2 play-in picks (local)
   const [playInResults, setPlayInResults] = useState(null); // admin-set actual play-in results
   const [showPlayIn,    setShowPlayIn]    = useState(false); // play-in modal visibility
+
+  // Whenever the admin updates results (including play-in) or the participant
+  // changes their play-in picks, re-run pick-cleaning so downstream slots stay
+  // consistent.  This handles cases where admin overwrites a play-in result and
+  // the user never touches the bracket again.
+  useEffect(() => {
+    if (!results) return;
+    // build flat results-as-picks for cleaning
+    const resultsAsPicks = {};
+    (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
+      .flatMap(r => Array.isArray(r.series) ? r.series : Object.values(r.series || {}))
+      .forEach(s => {
+        if (s?.id && s?.winner) resultsAsPicks[s.id] = { winner: s.winner, games: s.games };
+      });
+    const piSeeds1 = resolveEffectiveSeeds(playInPicks  || {}, playInResults);
+    const piSeeds2 = resolveEffectiveSeeds(playInPicks2 || {}, playInResults);
+    setMyPicks(prev => cleanDownstreamPicks(prev, resultsAsPicks, piSeeds1));
+    setMyPicks2(prev => cleanDownstreamPicks(prev, resultsAsPicks, piSeeds2));
+  }, [results, playInResults, playInPicks, playInPicks2]);
+
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -3111,31 +3139,3 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Bracket view — read-only */}
-                <BracketView picks={ep.picks || {}} readOnly results={results}
-                  playInSeeds={resolveEffectiveSeeds(ep.playInPicks || {}, playInResults)} />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {toast && <div className="toast">{toast}</div>}
-
-      {/* ══ PLAY-IN MODAL ═══════════════════════════════════════════════════ */}
-      {showPlayIn && (
-        <PlayInModal
-          activeEntry={activeEntry}
-          playInPicks={playInPicks}
-          playInPicks2={playInPicks2}
-          playInResults={playInResults}
-          onPick={handlePlayInPick}
-          onClose={() => setShowPlayIn(false)}
-        />
-      )}
-
-      {/* ══ INFO / HOW TO PLAY PANEL ════════════════════════════════════════ */}
-      {infoOpen && <InfoModal tab={tab} onClose={() => setInfoOpen(false)} />}
-    </>
-  );
-}
