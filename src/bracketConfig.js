@@ -13,14 +13,14 @@ export const BRACKET_CONFIG = {
       winnerPoints: 10,
       gamesPoints: 5,
       series: [
-        { id:"s1",  top:"Boston Celtics",          bottom:"Miami Heat",           conference:"East", topSeed:1, bottomSeed:8 },
-        { id:"s2",  top:"Milwaukee Bucks",          bottom:"Indiana Pacers",       conference:"East", topSeed:2, bottomSeed:7 },
-        { id:"s3",  top:"Cleveland Cavaliers",      bottom:"Orlando Magic",        conference:"East", topSeed:3, bottomSeed:6 },
-        { id:"s4",  top:"New York Knicks",          bottom:"Philadelphia 76ers",   conference:"East", topSeed:4, bottomSeed:5 },
-        { id:"s5",  top:"Oklahoma City Thunder",    bottom:"New Orleans Pelicans", conference:"West", topSeed:1, bottomSeed:8 },
-        { id:"s6",  top:"Denver Nuggets",           bottom:"LA Lakers",            conference:"West", topSeed:2, bottomSeed:7 },
-        { id:"s7",  top:"Minnesota Timberwolves",   bottom:"Phoenix Suns",         conference:"West", topSeed:3, bottomSeed:6 },
-        { id:"s8",  top:"LA Clippers",              bottom:"Dallas Mavericks",     conference:"West", topSeed:4, bottomSeed:5 },
+        { id:"s1",  top:"Detroit Pistons",         bottom:"Miami Heat",           conference:"East", topSeed:1, bottomSeed:8 },
+        { id:"s2",  top:"Boston Celtics",          bottom:"Orlando Magic",        conference:"East", topSeed:2, bottomSeed:7 },
+        { id:"s3",  top:"New York Knicks",         bottom:"Cleveland Cavaliers",   conference:"East", topSeed:3, bottomSeed:6 },
+        { id:"s4",  top:"Cleveland Cavaliers",      bottom:"Toronto Raptors",      conference:"East", topSeed:4, bottomSeed:5 },
+        { id:"s5",  top:"Oklahoma City Thunder",    bottom:"Golden State Warriors",conference:"West", topSeed:1, bottomSeed:8 },
+        { id:"s6",  top:"San Antonio Spurs",        bottom:"Phoenix Suns",         conference:"West", topSeed:2, bottomSeed:7 },
+        { id:"s7",  top:"Houston Rockets",         bottom:"Los Angeles Lakers",   conference:"West", topSeed:3, bottomSeed:6 },
+        { id:"s8",  top:"Minnesota Timberwolves",   bottom:"Denver Nuggets",       conference:"West", topSeed:4, bottomSeed:5 },
       ]
     },
     {
@@ -67,24 +67,24 @@ export const MAX_POINTS = BRACKET_CONFIG.rounds.reduce((acc, r) =>
 // whether they keep those slots or are replaced by seed9/seed10.
 export const PLAY_IN_CONFIG = {
   East: {
-    seed7:  "Indiana Pacers",
+    seed7:  "Orlando Magic",
     seed8:  "Miami Heat",
-    seed9:  "Chicago Bulls",
-    seed10: "Detroit Pistons",
+    seed9:  "Charlotte Hornets",
+    seed10: "Atlanta Hawks",
   },
   West: {
-    seed7:  "LA Lakers",
-    seed8:  "New Orleans Pelicans",
-    seed9:  "San Antonio Spurs",
-    seed10: "Sacramento Kings",
+    seed7:  "Phoenix Suns",
+    seed8:  "Golden State Warriors",
+    seed9:  "Los Angeles Clippers",
+    seed10: "Portland Trail Blazers",
   },
 };
 
 // Maps each play-in seed slot to the R1 series + slot it fills.
 // The #7 and #8 seeds always occupy the "bottom" slot in their respective R1 matchups.
 export const PLAY_IN_SLOTS = {
-  E7: "s2",  // East #2 (Milwaukee Bucks) vs East #7 seed
-  E8: "s1",  // East #1 (Boston Celtics)  vs East #8 seed
-  W7: "s6",  // West #2 (Denver Nuggets)  vs West #7 seed
-  W8: "s5",  // West #1 (OKC Thunder)     vs West #8 seed
+  E7: "s2",  // East #2 (Boston Celtics) vs East #7 seed
+  E8: "s1",  // East #1 (Detroit Pistons)  vs East #8 seed
+  W7: "s6",  // West #2 (San Antonio Spurs)  vs West #7 seed
+  W8: "s5",  // West #1 (Oklahoma City Thunder)  vs West #8 seed
 };
