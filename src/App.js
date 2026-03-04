@@ -1172,8 +1172,7 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
   }));
 
   // ── Eliminated teams (computed once for this bracket render) ─────────────
-  // Pass play-in seeds so R1 losers reflect promoted teams correctly
-  const eliminatedTeams = getEliminatedTeams(results, playInSeeds);
+  const eliminatedTeams = getEliminatedTeams(results);
 
   // ── Card renderer ─────────────────────────────────────────────────────────
   function renderCard(sid, topPx, col) {
@@ -1470,9 +1469,8 @@ function getAdminResultForSeries(results, sid) {
 // Lets each entry independently pick winners for all 6 play-in games.
 // Admin-set results override and lock individual game slots.
 
-function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, onPick, onClose, scenarioMode, scenarioPlayInPicks, onScenarioPlayInPick }) {
-  const picks = scenarioMode ? scenarioPlayInPicks : (activeEntry === 1 ? playInPicks : playInPicks2);
-  const handlePlayInPick = scenarioMode ? onScenarioPlayInPick : onPick;
+function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, onPick, onClose }) {
+  const picks = activeEntry === 1 ? playInPicks : playInPicks2;
 
   function renderConference(conf) {
     const cfg   = PLAY_IN_CONFIG[conf];
@@ -1513,7 +1511,7 @@ function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, on
                   <button key={tname}
                     className={`pi-team ${cls}`}
                     style={{gridColumn: idx === 0 ? '1' : '3'}}
-                    onClick={() => canPick && handlePlayInPick(game.id, tname)}
+                    onClick={() => canPick && onPick(game.id, tname)}
                     disabled={settled || !canPick}
                   >
                     <TeamLogo name={tname} size={32} state={settled ? (isW ? "ok" : "wrong") : (game.pick === tname ? "sel" : "")} />
@@ -1579,7 +1577,7 @@ function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, on
           <div className="ov-hdr-left">
             <div className="ov-title">🏀 Play-In Tournament</div>
             <div className="ov-sub">
-              {scenarioMode ? "Scenario picks" : `Entry ${activeEntry} picks`} · {donePicks}/{totalGames} games picked
+              Entry {activeEntry} picks · {donePicks}/{totalGames} games picked
               {playInResults && Object.keys(playInResults).length > 0 &&
                 <span style={{color:'var(--cyan)', marginLeft:8}}>· Admin results locked for settled games</span>}
             </div>
@@ -1808,7 +1806,6 @@ export default function App() {
   const [picksLocked,  setPicksLocked]  = useState(false);
   const [viewingEntry, setViewingEntry] = useState(null);  // participant whose picks are open in overlay
   const [scenarioPicks,  setScenarioPicks]  = useState({});  // local session-only scenario picks
-  const [scenarioPlayInPicks, setScenarioPlayInPicks] = useState({});  // scenario play-in picks
   const [deadline,         setDeadline]         = useState("");  // ISO string from Firebase settings/deadline
   const [adminDeadlineDate, setAdminDeadlineDate] = useState(""); // date input for admin editor
   const [adminDeadlineTime, setAdminDeadlineTime] = useState(""); // time input for admin editor
@@ -2172,17 +2169,10 @@ export default function App() {
       const arr = Array.isArray(round.series) ? round.series : Object.values(round.series || {});
       arr.forEach(s => { if (s?.id && s?.winner) adminPicks[s.id] = { winner: s.winner }; });
     });
-    // Compute effective seeds for scenario mode (scenario play-in picks + admin results)
-    const scenarioSeeds = resolveEffectiveSeeds(scenarioPlayInPicks, playInResults);
-    setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, adminPicks, scenarioSeeds));
+    setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, adminPicks));
   };
-
-  const handleScenarioPlayInPick = (gameId, team) => {
-    setScenarioPlayInPicks(prev => ({ ...prev, [gameId]: team }));
-  };
-
   const handleScenarioAutoFill = () => {
-    const eliminated = getEliminatedTeams(results, adminPlayInSeeds);
+    const eliminated = getEliminatedTeams(results);
     // Use whichever entry is selected in the scenario toggle
     const srcPicks = scenarioEntry === 1 ? myPicks : myPicks2;
     const filled = {};
@@ -2191,11 +2181,7 @@ export default function App() {
     });
     setScenarioPicks(filled);
   };
-
-  const handleScenarioClear = () => {
-    setScenarioPicks({});
-    setScenarioPlayInPicks({});
-  };
+  const handleScenarioClear = () => setScenarioPicks({});
 
   // ── Admin: paid status toggle ──
   const handlePaidToggle = async (participantKey, currentPaid) => {
@@ -2268,19 +2254,9 @@ export default function App() {
       flatParticipants[key + '__2'] = { ...p, picks: subPicks2 };
     }
   });
-  // Compute admin play-in effective seeds so R1 slots reflect actual promoted teams
-  const adminPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
-  // Build a results object with BRACKET_CONFIG structure populated with admin results
-  // and apply play-in patches so scoring/elimination logic sees the correct R1 teams.
-  const resultsWithAdminPlayIn = buildScenarioResults(results, {});
-  resultsWithAdminPlayIn.rounds = resultsWithAdminPlayIn.rounds.map(r => ({
-    ...r,
-    series: r.series.map(s => applyPlayInPatch(s, adminPlayInSeeds)),
-  }));
-
-  const leaderboard = buildLeaderboard(flatParticipants, resultsWithAdminPlayIn);
+  const leaderboard = buildLeaderboard(flatParticipants, results);
   const topPts      = leaderboard[0]?.points || 1;
-  const eliminatedTeams = getEliminatedTeams(results, adminPlayInSeeds);
+  const eliminatedTeams = getEliminatedTeams(results);
 
   // ── Pool stats ──
   const completedCount = (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
@@ -2299,8 +2275,10 @@ export default function App() {
   const piAllGames = ["piE1","piE2","piE3","piW1","piW2","piW3"];
   const piDoneCount = piAllGames.filter(k => playInResults?.[k] || activePlayInPicks[k]).length;
   const piComplete  = piDoneCount === piAllGames.length;
-  // Scenario tab: use scenario play-in picks + admin results
-  const scenarioPlayInSeeds = resolveEffectiveSeeds(scenarioPlayInPicks, playInResults);
+  // Scenario tab: only use admin play-in results
+  const scenarioPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
+  // Admin bracket display: use actual play-in results only
+  const adminPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
 
   // ── Admin: resolve bracket using actual results so later rounds show real team names ──
   const resultsAsPicks = {};
@@ -2710,42 +2688,6 @@ export default function App() {
                     <div className="xs muted mb8" style={{letterSpacing:"1.5px", textTransform:"uppercase", borderBottom:"1px solid var(--border)", paddingBottom:6}}>
                       Scenario Bracket — click to pick remaining series
                     </div>
-
-                    {/* Play-In banner for scenario */}
-                    {(() => {
-                      const adminSettled = playInResults && Object.keys(playInResults).length > 0;
-                      const scenarioPiDoneCount = piAllGames.filter(k => (playInResults?.[k] || scenarioPlayInPicks[k])).length;
-                      const scenarioPiComplete = scenarioPiDoneCount === piAllGames.length;
-                      const bannerClass  = adminSettled ? "pi-banner pi-banner-admin"
-                                         : scenarioPiComplete   ? "pi-banner pi-banner-complete"
-                                         :                "pi-banner pi-banner-incomplete";
-                      const titleColor   = adminSettled ? "var(--cyan)"
-                                         : scenarioPiComplete   ? "var(--green)"
-                                         :                "var(--gold)";
-                      const btnLabel     = scenarioPiComplete || adminSettled ? "✏ Edit Play-In Picks" : "📋 Make Play-In Picks";
-                      return (
-                        <div className={bannerClass} style={{marginBottom:16}}>
-                          <div>
-                            <div className="pi-banner-title" style={{color: titleColor}}>
-                              🏀 PLAY-IN TOURNAMENT
-                            </div>
-                            <div className="pi-banner-sub">
-                              {adminSettled
-                                ? `Admin has locked play-in results · ${scenarioPiDoneCount}/6 games settled`
-                                : scenarioPiComplete
-                                  ? `All 6 play-in picks complete — R1 matchups unlocked`
-                                  : `${scenarioPiDoneCount}/6 play-in picks made — pick winners to unlock all R1 matchups`}
-                            </div>
-                          </div>
-                          <button className={`btn ${scenarioPiComplete || adminSettled ? "btn-ghost" : "btn-gold"}`}
-                            style={{fontSize:'0.76rem', padding:'8px 18px', flexShrink:0}}
-                            onClick={() => setShowPlayIn(true)}>
-                            {btnLabel}
-                          </button>
-                        </div>
-                      );
-                    })()}
-
                     <div style={{marginTop:8}}>
                       <BracketView
                         picks={scenarioPicks}
@@ -3250,9 +3192,6 @@ export default function App() {
           playInResults={playInResults}
           onPick={handlePlayInPick}
           onClose={() => setShowPlayIn(false)}
-          scenarioMode={tab === "scenario"}
-          scenarioPlayInPicks={scenarioPlayInPicks}
-          onScenarioPlayInPick={handleScenarioPlayInPick}
         />
       )}
 
