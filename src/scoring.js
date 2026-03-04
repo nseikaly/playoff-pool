@@ -1,4 +1,4 @@
-import { BRACKET_CONFIG } from "./bracketConfig";
+import { BRACKET_CONFIG, PLAY_IN_CONFIG } from "./bracketConfig";
 
 // ─── Bracket feed map ─────────────────────────────────────────────────────────
 // Maps each later-round series to the two earlier-round series whose winners feed into it.
@@ -45,17 +45,37 @@ function buildResultWinners(results) {
 // Get the set of all teams that have been eliminated based on current results.
 // R1 losers are identified via BRACKET_CONFIG team names.
 // Later-round losers are identified via FEEDS_FROM + known R1/later winners.
-export function getEliminatedTeams(results) {
+export function getEliminatedTeams(results, playInSeeds = null) {
   const eliminated = new Set();
   if (!results) return eliminated;
 
   const resultWinners = buildResultWinners(results);
+  // Map of R1 play-in series -> seed key (matches App.js PI_SLOT_MAP)
+  const PI_SLOT_MAP = { s1: "E8", s2: "E7", s5: "W8", s6: "W7" };
 
-  // R1: team names are fixed in BRACKET_CONFIG — find losers directly
-  BRACKET_CONFIG.rounds[0].series.forEach(s => {
+  // If the passed `results` already contain series top/bottom (e.g. we
+  // constructed a patched results object with play-in applied), prefer that
+  // data for determining R1 losers. Otherwise fall back to BRACKET_CONFIG
+  // and apply any provided play-in seed overrides.
+  const roundsArray = Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {});
+  const r1FromResults = roundsArray[0]?.series;
+
+  const r1SeriesSource = (r1FromResults && r1FromResults.length) ? r1FromResults : BRACKET_CONFIG.rounds[0].series;
+
+  r1SeriesSource.forEach(s => {
     const winner = resultWinners[s.id];
     if (winner) {
-      const loser = winner === s.top ? s.bottom : s.top;
+      let topTeam = s.top;
+      let bottomTeam = s.bottom;
+      // If using BRACKET_CONFIG as source and playInSeeds provided, apply override
+      if (r1SeriesSource === BRACKET_CONFIG.rounds[0].series) {
+        const seedKey = PI_SLOT_MAP[s.id];
+        if (seedKey && playInSeeds) {
+          const promoted = playInSeeds[seedKey];
+          if (promoted) bottomTeam = promoted;
+        }
+      }
+      const loser = winner === topTeam ? bottomTeam : topTeam;
       if (loser) eliminated.add(loser);
     }
   });
