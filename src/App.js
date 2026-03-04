@@ -218,7 +218,6 @@ const css = `
     background:rgba(201,168,76,0.04) !important; cursor:pointer !important; }
   .bm-team-pi-tbd:hover { border-color:rgba(201,168,76,0.65) !important;
     background:rgba(201,168,76,0.1) !important; }
-  .bm-team-pi-tbd:disabled { cursor:default !important; opacity:0.45 !important; }
   .bm-team-pi-tbd-text { font-size:0.6rem; color:var(--gold); letter-spacing:0.8px;
     font-weight:700; opacity:0.7; }
   .bm-team-pi-tbd:hover .bm-team-pi-tbd-text { opacity:1; }
@@ -986,10 +985,7 @@ function BracketMatchup({ series, round, picks, onPick, readOnly, results, isFin
           {bottomSeed != null && <span className="bm-seed">#{bottomSeed}</span>}
         </button>
       ) : series.bottom === "Play-In TBD" ? (
-        <button className="bm-team bm-team-pi-tbd"
-          onClick={() => setShowPlayIn(true)}
-          disabled={picksLocked}
-          aria-label="Play-In TBD — make Play-In picks first">
+        <button className="bm-team bm-team-pi-tbd" disabled aria-label="Play-In TBD — make Play-In picks first">
           <span style={{fontSize:'0.75rem'}}>🏀</span>
           <span className="bm-team-pi-tbd-text">PLAY-IN TBD</span>
         </button>
@@ -1473,7 +1469,7 @@ function getAdminResultForSeries(results, sid) {
 // Lets each entry independently pick winners for all 6 play-in games.
 // Admin-set results override and lock individual game slots.
 
-function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, onPick, onClose, picksLocked }) {
+function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, onPick, onClose }) {
   const picks = activeEntry === 1 ? playInPicks : playInPicks2;
 
   function renderConference(conf) {
@@ -1516,7 +1512,7 @@ function PlayInModal({ activeEntry, playInPicks, playInPicks2, playInResults, on
                     className={`pi-team ${cls}`}
                     style={{gridColumn: idx === 0 ? '1' : '3'}}
                     onClick={() => canPick && onPick(game.id, tname)}
-                    disabled={settled || !canPick || picksLocked}
+                    disabled={settled || !canPick}
                   >
                     <TeamLogo name={tname} size={32} state={settled ? (isW ? "ok" : "wrong") : (game.pick === tname ? "sel" : "")} />
                     <span className="pi-team-name">{tname}</span>
@@ -2096,7 +2092,6 @@ export default function App() {
 
   // ── Play-In: participant pick handler ──
   const handlePlayInPick = (gameId, winner) => {
-    if (picksLocked) return; // no changes allowed when picks are locked
     const doUpdate = (prev) => {
       const next = { ...prev, [gameId]: winner };
       // Deselect if picking the already-selected winner (toggle)
@@ -2437,10 +2432,9 @@ export default function App() {
                           : `${piDoneCount}/${piAllGames.length} play-in picks made — pick winners to unlock all R1 matchups`}
                     </div>
                   </div>
-                  <button className={`btn ${(piComplete || adminSettled || picksLocked) ? "btn-ghost" : "btn-gold"}`}
+                  <button className={`btn ${piComplete || adminSettled ? "btn-ghost" : "btn-gold"}`}
                     style={{fontSize:'0.76rem', padding:'8px 18px', flexShrink:0}}
-                    onClick={() => setShowPlayIn(true)}
-                    disabled={piComplete || adminSettled || picksLocked}>
+                    onClick={() => setShowPlayIn(true)}>
                     {btnLabel}
                   </button>
                 </div>
@@ -3198,7 +3192,6 @@ export default function App() {
           playInResults={playInResults}
           onPick={handlePlayInPick}
           onClose={() => setShowPlayIn(false)}
-          picksLocked={picksLocked}
         />
       )}
 
