@@ -240,6 +240,7 @@ const css = `
   .entry-btn.active { background:var(--gold); color:#111; }
   .entry-btn .entry-check { margin-left:5px; font-size:0.65rem; }
   .entry-btn.active .entry-check { color:#111; }
+  .entry-btn:disabled { opacity:0.45; cursor:default; }
 
   /* Legend */
   .legend { display:flex; gap:20px; flex-wrap:wrap; padding:11px 16px; background:var(--surface2);
@@ -2376,11 +2377,15 @@ export default function App() {
                 Once an entry is submitted, the pill shows the participant's display name. */}
             <div style={{marginBottom:20}}>
               <div className="entry-toggle">
-                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
+                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`}
+                  onClick={() => setActiveEntry(1)}
+                  disabled={picksLocked && !submitted}>
                   {submitted && myName.trim() ? myName.trim().slice(0,14) : "Entry 1"}
                   {submitted && <span className="entry-check">✓</span>}
                 </button>
-                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
+                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`}
+                  onClick={() => setActiveEntry(2)}
+                  disabled={picksLocked && !submitted2}>
                   {submitted2 && (myName2.trim() || myName.trim())
                     ? (myName2.trim() || myName.trim()).slice(0,14)
                     : "Entry 2"}
@@ -2626,11 +2631,15 @@ export default function App() {
                 <div style={{marginBottom:20}}>
                   <div className="xs muted" style={{marginBottom:8, letterSpacing:'1px'}}>Viewing picks for:</div>
                   <div className="entry-toggle">
-                    <button className={`entry-btn ${scenarioEntry === 1 ? "active" : ""}`} onClick={() => setScenarioEntry(1)}>
+                    <button className={`entry-btn ${scenarioEntry === 1 ? "active" : ""}`}
+                      onClick={() => setScenarioEntry(1)}
+                      disabled={!submitted}>
                       {submitted && myName.trim() ? myName.trim().slice(0,14) : "Entry 1"}
                       {submitted && <span className="entry-check">✓</span>}
                     </button>
-                    <button className={`entry-btn ${scenarioEntry === 2 ? "active" : ""}`} onClick={() => setScenarioEntry(2)}>
+                    <button className={`entry-btn ${scenarioEntry === 2 ? "active" : ""}`}
+                      onClick={() => setScenarioEntry(2)}
+                      disabled={!submitted2}>
                       {submitted2 && (myName2.trim() || myName.trim())
                         ? (myName2.trim() || myName.trim()).slice(0,14)
                         : "Entry 2"}
