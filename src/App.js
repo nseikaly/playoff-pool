@@ -992,15 +992,19 @@ function nextRoundTops(srcTops, cardH) {
 // Virtual-substitute picks for DISPLAY only: if admin/participant has confirmed
 // a play-in team for a slot and the stored pick references a DIFFERENT team,
 // replace that team with the actual play-in winner everywhere it appears in
-// later rounds (only where it is no longer a valid team in that series).
-// This does NOT modify stored data — it is only used when rendering the bracket.
+// later rounds. This does NOT modify stored data — only used when rendering.
 function virtualSubstitutePicksForPlayIn(picks, playInSeeds) {
   if (!playInSeeds) return picks;
   let result = { ...picks };
 
   // Step 1: Fix R1 play-in slots and record which teams need substitution.
   // subs maps: wrongTeam → actualPlayInWinner
+  // substituted tracks series IDs already corrected so Step 2 never re-processes
+  // them — critical because resolveBracket returns BRACKET_CONFIG's original bottom
+  // for R1 series (e.g. "LA Lakers"), not the play-in-patched team, so the old
+  // "presence check" would not block a double-substitution of those slots.
   const subs = {};
+  const substituted = new Set();
   Object.entries(PI_SLOT_MAP).forEach(([sid, seedKey]) => {
     const actualBottom = playInSeeds[seedKey];
     if (!actualBottom) return; // play-in result not yet known for this slot
@@ -1012,38 +1016,32 @@ function virtualSubstitutePicksForPlayIn(picks, playInSeeds) {
       // Participant picked a team that is no longer in this slot — substitute
       subs[pick.winner] = actualBottom;
       result = { ...result, [sid]: { ...pick, winner: actualBottom } };
+      substituted.add(sid); // mark as done — Step 2 must not touch this again
     }
   });
 
   if (Object.keys(subs).length === 0) return result;
 
-  // Step 2: Walk later rounds in order (R2 → R3 → Finals), substituting the
-  // old team with the new team ONLY where the old team is no longer available
-  // in that series (it may still be valid via a different upstream slot).
-  // Repeat up to 3 passes so that each level of the bracket gets corrected
-  // using the already-fixed upstream level.
+  // Step 2: Walk all picks and substitute wrong teams with actual play-in winners.
+  // We do NOT use the "team present in resolved series" check here because when
+  // two play-in slots are both wrong (e.g. W7 and W8 swapped), a chained
+  // substitution can place a wrong team into the resolved series through a
+  // different path, incorrectly blocking the needed correction.
+  // Instead, the `substituted` set is the guard: once a series is corrected
+  // it is never touched again, preventing a series that was fixed as
+  // "LA Lakers → New Orleans" from being chain-substituted on to "Sacramento".
   for (let pass = 0; pass < 3; pass++) {
-    // Resolve the bracket using the latest corrected picks to see what teams
-    // are actually available in each later-round series.
-    const resolved = resolveBracket(result);
-    const seriesMap = {};
-    resolved.forEach(round => round.series.forEach(s => { seriesMap[s.id] = s; }));
-
     let changed = false;
     const nextResult = { ...result };
 
     Object.entries(result).forEach(([sid, pick]) => {
       if (!pick?.winner) return;
+      if (substituted.has(sid)) return; // already corrected — do not chain-substitute
       const newTeam = subs[pick.winner];
       if (!newTeam) return; // this team doesn't need substitution
-      const series = seriesMap[sid];
-      if (!series) return;
-      // Only substitute if the old team is NOT present in this series.
-      // If it's still present (came from a different play-in slot), leave it.
-      if (series.top !== pick.winner && series.bottom !== pick.winner) {
-        nextResult[sid] = { ...pick, winner: newTeam };
-        changed = true;
-      }
+      nextResult[sid] = { ...pick, winner: newTeam };
+      substituted.add(sid);
+      changed = true;
     });
 
     result = nextResult;
