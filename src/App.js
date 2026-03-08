@@ -212,6 +212,66 @@ const css = `
   .entry-btn .entry-check { margin-left:5px; font-size:0.65rem; }
   .entry-btn.active .entry-check { color:#111; }
 
+  /* Standalone entry pill (when only one entry submitted — flex row layout) */
+  .entry-toggle-row { display:flex; gap:10px; align-items:center; margin-bottom:18px; }
+  .entry-btn-pill { border-radius:8px; border:1px solid var(--border2); padding:11px 22px; min-width:auto; }
+  .entry-btn-pill.active { background:var(--gold); color:#111; border-color:transparent; }
+
+  /* "＋ Add Entry 2" dashed pill button */
+  .entry-add-btn {
+    display:inline-flex; align-items:center; gap:5px;
+    background:transparent; border:1.5px dashed rgba(201,168,76,0.45);
+    color:var(--gold); border-radius:8px; padding:10px 18px;
+    font-size:0.76rem; font-weight:700; letter-spacing:1px;
+    font-family:'Bebas Neue',sans-serif; cursor:pointer;
+    transition:all 0.15s; white-space:nowrap; }
+  .entry-add-btn:hover { background:rgba(201,168,76,0.08); border-color:var(--gold); border-style:solid; }
+
+  /* ── Submission Success Overlay ──────────────────────────────────────── */
+  .sub-success-modal {
+    position:relative; background:var(--surface); border:1px solid var(--border2);
+    border-radius:16px; width:100%; max-width:460px; padding:44px 40px 36px;
+    text-align:center; flex-shrink:0;
+    animation:sub-success-pop 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+  @keyframes sub-success-pop { from{opacity:0;transform:translateY(32px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+  .sub-success-close {
+    position:absolute; top:14px; right:14px; width:30px; height:30px;
+    background:var(--surface2); border:1px solid var(--border2); border-radius:7px;
+    cursor:pointer; color:var(--text3); font-size:0.85rem;
+    display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+  .sub-success-close:hover { color:var(--text); border-color:var(--border2); background:var(--surface3); }
+  .sub-success-icon { font-size:3.2rem; margin-bottom:10px; line-height:1; }
+  .sub-success-title {
+    font-family:'Bebas Neue',sans-serif; font-size:2.4rem; letter-spacing:5px;
+    color:var(--gold); line-height:1; margin-bottom:4px; }
+  .sub-success-name {
+    font-size:1rem; font-weight:700; color:var(--text); margin-bottom:6px; letter-spacing:0.5px; }
+  .sub-success-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3);
+    color:var(--green); font-size:0.68rem; letter-spacing:1.5px; text-transform:uppercase;
+    font-weight:700; border-radius:20px; padding:3px 10px; margin-bottom:20px; }
+  .sub-success-stats {
+    display:flex; justify-content:center; gap:0;
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; margin-bottom:22px; }
+  .sub-stat { text-align:center; flex:1; padding:14px 10px; }
+  .sub-stat:not(:last-child) { border-right:1px solid var(--border); }
+  .sub-stat-num { font-family:'Bebas Neue',sans-serif; font-size:1.9rem; color:var(--gold); line-height:1; margin-bottom:2px; }
+  .sub-stat-label { font-size:0.59rem; color:var(--text3); text-transform:uppercase; letter-spacing:1px; }
+  .sub-success-divider {
+    display:flex; align-items:center; gap:10px;
+    color:var(--text3); font-size:0.68rem; letter-spacing:1.5px; text-transform:uppercase;
+    margin-bottom:10px; }
+  .sub-success-divider::before, .sub-success-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+  .sub-success-desc { font-size:0.79rem; color:var(--text2); line-height:1.55; margin-bottom:22px; }
+  .sub-success-actions { display:flex; flex-direction:column; gap:8px; }
+  .sub-success-btn-primary { width:100%; padding:13px; font-size:0.85rem; letter-spacing:1.5px; border-radius:6px; }
+  .sub-success-btn-secondary {
+    background:transparent; border:none; color:var(--text3); font-size:0.75rem;
+    cursor:pointer; padding:6px; transition:color 0.15s; letter-spacing:0.5px; }
+  .sub-success-btn-secondary:hover { color:var(--text2); }
+
   /* Legend */
   .legend { display:flex; gap:20px; flex-wrap:wrap; padding:11px 16px; background:var(--surface2);
     border:1px solid var(--border); border-radius:6px; margin-bottom:22px; }
@@ -640,7 +700,7 @@ const css = `
   @media print {
     @page { size: A4 landscape; margin: 8mm; }
     .tabs, .hdr, .legend, .form, .alert, .toast,
-    .entry-toggle, .sec { display:none !important; }
+    .entry-toggle, .entry-toggle-row, .entry-add-btn, .sub-success-modal, .sec { display:none !important; }
     .app { padding:0; max-width:100%; }
     body { background:white !important; color:#111 !important; }
     :root { --bg:white; --surface:white; --surface2:#f5f5f5; --surface3:#eee;
@@ -1765,6 +1825,7 @@ export default function App() {
   const [playInPicks2,  setPlayInPicks2]  = useState({});  // entry 2 play-in picks (local)
   const [playInResults, setPlayInResults] = useState(null); // admin-set actual play-in results
   const [showPlayIn,    setShowPlayIn]    = useState(false); // play-in modal visibility
+  const [submittedEntryFlash, setSubmittedEntryFlash] = useState(null); // null | 1 | 2 — which entry just had its first submission
   const toastTimer = useRef(null);
 
   // ── Firebase listeners ──
@@ -1941,6 +2002,9 @@ export default function App() {
     }
     setSaving(true);
     try {
+      // Capture first-submit flags before state changes
+      const wasFirstE1 = !submitted;
+      const wasFirstE2 = !submitted2;
       const key = sanitize(myName);
       if (activeEntry === 1) {
         // Entry 1: use set() to create/overwrite the whole record, preserving any existing entry 2
@@ -1959,8 +2023,10 @@ export default function App() {
         localStorage.setItem("pool_name",      myName.trim());
         localStorage.setItem("pool_submitted", "1");
         setSubmitted(true);
-        // Stay on My Picks tab but switch to Entry 2 so user can fill it out
-        setActiveEntry(2);
+        // First-time submit → show success overlay; update → just toast
+        if (wasFirstE1) {
+          setSubmittedEntryFlash(1);
+        }
       } else {
         // Entry 2: use update() so we never overwrite entry 1 picks
         const name2Value  = myName2.trim()  || myName.trim();
@@ -1976,9 +2042,15 @@ export default function App() {
         localStorage.setItem("pool_name_2",  name2Value);
         localStorage.setItem("pool_email_2", myEmail2.trim());
         setSubmitted2(true);
+        // First-time submit → show success overlay; update → just toast
+        if (wasFirstE2) {
+          setSubmittedEntryFlash(2);
+        }
       }
       setSubmitError(""); // clear any stale inline error on successful save
-      showToast(activeEntry === 1 ? "🏆 Entry 1 submitted! Now fill out Entry 2 below." : "🏆 Entry 2 submitted!");
+      // Only show toast for updates; first-time submissions get the success overlay
+      if (activeEntry === 1 && !wasFirstE1) showToast("✓ Entry 1 updated!");
+      if (activeEntry === 2 && !wasFirstE2) showToast("✓ Entry 2 updated!");
     } catch (e) {
       showToast("Error saving — check Firebase config");
       console.error(e);
@@ -2316,22 +2388,43 @@ export default function App() {
               </div>
             </div>
 
-            {/* Entry toggle — switch between Entry 1 and Entry 2.
-                Once an entry is submitted, the pill shows the participant's display name. */}
-            <div style={{marginBottom:20}}>
-              <div className="entry-toggle">
-                <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
-                  {submitted && myName.trim() ? myName.trim().slice(0,14) : "Entry 1"}
-                  {submitted && <span className="entry-check">✓</span>}
-                </button>
-                <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
-                  {submitted2 && (myName2.trim() || myName.trim())
-                    ? (myName2.trim() || myName.trim()).slice(0,14)
-                    : "Entry 2"}
-                  {submitted2 && <span className="entry-check">✓</span>}
-                </button>
+            {/* Entry pills — appear progressively as entries are submitted.
+                0 submitted → nothing shown (clean first-visit experience)
+                1 submitted → Entry 1 pill + "Add Entry 2" button (or just pill when editing E2)
+                2 submitted → classic joined segmented control */}
+            {submitted && (
+              <div style={{marginBottom:20}}>
+                {submitted && submitted2 ? (
+                  // Both submitted: classic joined segmented control
+                  <div className="entry-toggle">
+                    <button className={`entry-btn ${activeEntry === 1 ? "active" : ""}`} onClick={() => setActiveEntry(1)}>
+                      {myName.trim().slice(0,14) || "Entry 1"}
+                      <span className="entry-check">✓</span>
+                    </button>
+                    <button className={`entry-btn ${activeEntry === 2 ? "active" : ""}`} onClick={() => setActiveEntry(2)}>
+                      {(myName2.trim() || myName.trim()).slice(0,14) || "Entry 2"}
+                      <span className="entry-check">✓</span>
+                    </button>
+                  </div>
+                ) : (
+                  // Only Entry 1 submitted: standalone pill + optional "Add Entry 2" button
+                  <div className="entry-toggle-row">
+                    <button
+                      className={`entry-btn entry-btn-pill ${activeEntry === 1 ? "active" : ""}`}
+                      onClick={() => setActiveEntry(1)}
+                    >
+                      {myName.trim().slice(0,14) || "Entry 1"}
+                      <span className="entry-check">✓</span>
+                    </button>
+                    {activeEntry === 1 && !picksLocked && (
+                      <button className="entry-add-btn" onClick={() => setActiveEntry(2)}>
+                        ＋ Add Entry 2
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             {picksLocked && (
               <div className="alert alert-locked mb16">
@@ -3128,6 +3221,87 @@ export default function App() {
           onPick={handlePlayInPick}
           onClose={() => setShowPlayIn(false)}
         />
+      )}
+
+      {/* ══ SUBMISSION SUCCESS OVERLAY ══════════════════════════════════════ */}
+      {submittedEntryFlash === 1 && (
+        <div className="ov-backdrop" onClick={e => { if(e.target === e.currentTarget) setSubmittedEntryFlash(null); }}>
+          <div className="sub-success-modal">
+            <button className="sub-success-close" onClick={() => setSubmittedEntryFlash(null)}>✕</button>
+            <div className="sub-success-icon">🏆</div>
+            <div className="sub-success-title">YOU'RE IN!</div>
+            <div className="sub-success-name">{myName.trim()}</div>
+            <div className="sub-success-badge">✓ Officially in the pool</div>
+            <div className="sub-success-stats">
+              <div className="sub-stat">
+                <div className="sub-stat-num">{Object.values(myPicks).filter(p => p?.winner).length}</div>
+                <div className="sub-stat-label">Series Picked</div>
+              </div>
+              <div className="sub-stat">
+                <div className="sub-stat-num">{maxPossible(myPicks, results, adminPlayInSeeds)}</div>
+                <div className="sub-stat-label">Max Pts</div>
+              </div>
+              <div className="sub-stat">
+                <div className="sub-stat-num">{BRACKET_CONFIG.rounds.length}</div>
+                <div className="sub-stat-label">Rounds</div>
+              </div>
+            </div>
+            <div className="sub-success-divider"><span>Want to double your chances?</span></div>
+            <p className="sub-success-desc">
+              Add a <strong>second entry</strong> with different picks — each entry competes independently on the leaderboard, doubling your shot at the top spot.
+            </p>
+            <div className="sub-success-actions">
+              <button
+                className="btn btn-gold sub-success-btn-primary"
+                onClick={() => { setActiveEntry(2); setSubmittedEntryFlash(null); }}
+              >
+                🏀&nbsp;&nbsp;Submit Entry 2
+              </button>
+              <button className="sub-success-btn-secondary" onClick={() => setSubmittedEntryFlash(null)}>
+                No thanks — I'm done for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {submittedEntryFlash === 2 && (
+        <div className="ov-backdrop" onClick={e => { if(e.target === e.currentTarget) setSubmittedEntryFlash(null); }}>
+          <div className="sub-success-modal">
+            <button className="sub-success-close" onClick={() => setSubmittedEntryFlash(null)}>✕</button>
+            <div className="sub-success-icon">🎉</div>
+            <div className="sub-success-title">ALL IN!</div>
+            <div className="sub-success-name">{myName2.trim() || myName.trim()}</div>
+            <div className="sub-success-badge">✓ Both entries submitted</div>
+            <div className="sub-success-stats">
+              <div className="sub-stat">
+                <div className="sub-stat-num">2</div>
+                <div className="sub-stat-label">Entries</div>
+              </div>
+              <div className="sub-stat">
+                <div className="sub-stat-num">{Object.values(myPicks2).filter(p => p?.winner).length}</div>
+                <div className="sub-stat-label">Series Picked</div>
+              </div>
+              <div className="sub-stat">
+                <div className="sub-stat-num">{maxPossible(myPicks2, results, adminPlayInSeeds)}</div>
+                <div className="sub-stat-label">Max Pts</div>
+              </div>
+            </div>
+            <p className="sub-success-desc">
+              You're fully loaded — two sets of picks, two shots at glory. Check the leaderboard to see how everyone stacks up.
+            </p>
+            <div className="sub-success-actions">
+              <button
+                className="btn btn-gold sub-success-btn-primary"
+                onClick={() => { setTab("leaderboard"); setSubmittedEntryFlash(null); }}
+              >
+                📊&nbsp;&nbsp;View Leaderboard
+              </button>
+              <button className="sub-success-btn-secondary" onClick={() => setSubmittedEntryFlash(null)}>
+                Stay here
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ══ INFO / HOW TO PLAY PANEL ════════════════════════════════════════ */}
