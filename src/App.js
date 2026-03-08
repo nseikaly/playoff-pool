@@ -1120,29 +1120,10 @@ function BracketView({ picks, onPick, readOnly, results, scenarioMode, myPicksFo
   }));
 
   // ── Eliminated teams (computed once for this bracket render) ─────────────
-  const eliminatedTeams = getEliminatedTeams(results);
-  // Patch: getEliminatedTeams derives R1 losers from BRACKET_CONFIG team names,
-  // but when play-in results are known the actual team filling a #7/#8 slot may
-  // differ from the config placeholder (e.g. Sacramento Kings instead of New
-  // Orleans Pelicans in the W8 slot).  Fix up the set so that:
-  //  • the config placeholder (never actually in that slot) is removed, and
-  //  • the real play-in team is added if they lost their R1 series.
-  if (playInSeeds) {
-    Object.entries(PI_SLOT_MAP).forEach(([sid, seedKey]) => {
-      const actualTeam  = playInSeeds[seedKey];
-      if (!actualTeam) return;
-      const r1Config    = BRACKET_CONFIG.rounds[0].series.find(s => s.id === sid);
-      if (!r1Config) return;
-      const configBottom = r1Config.bottom;
-      if (actualTeam === configBottom) return; // same team — no patch needed
-      const rs = getAdminResultForSeries(results, sid);
-      if (!rs?.winner) return; // R1 not yet settled, nothing was added
-      eliminatedTeams.delete(configBottom);          // remove false placeholder entry
-      if (rs.winner !== actualTeam) {
-        eliminatedTeams.add(actualTeam);             // actual loser → mark eliminated
-      }
-    });
-  }
+  // Pass playInSeeds so getEliminatedTeams uses the actual play-in team for each
+  // R1 slot instead of the BRACKET_CONFIG placeholder (e.g. Sacramento Kings
+  // instead of New Orleans Pelicans for the W8 slot).
+  const eliminatedTeams = getEliminatedTeams(results, playInSeeds ?? null);
 
   // ── Card renderer ─────────────────────────────────────────────────────────
   function renderCard(sid, topPx, col) {
@@ -2120,12 +2101,26 @@ export default function App() {
     setScenarioPicks(prev => cleanDownstreamPicks({ ...prev, [seriesId]: pick }, adminPicks));
   };
   const handleScenarioAutoFill = () => {
-    const eliminated = getEliminatedTeams(results);
+    // Use admin-only play-in seeds so elimination is based on confirmed results.
+    const eliminated = getEliminatedTeams(results, adminPlayInSeeds);
+    // Build substitution map for picks stored with BRACKET_CONFIG placeholder names
+    // (e.g. "Miami Heat" stored for the E8 slot before admin set play-in results).
+    // Maps configBottom → actualPlayInTeam so old-name picks are treated correctly.
+    const picksSubMap = {};
+    Object.entries(PI_SLOT_MAP).forEach(([sid, seedKey]) => {
+      const actualTeam = adminPlayInSeeds?.[seedKey];
+      if (!actualTeam) return;
+      const r1Config = BRACKET_CONFIG.rounds[0].series.find(s => s.id === sid);
+      if (!r1Config || actualTeam === r1Config.bottom) return;
+      picksSubMap[r1Config.bottom] = actualTeam;
+    });
     // Use whichever entry is selected in the scenario toggle
     const srcPicks = scenarioEntry === 1 ? myPicks : myPicks2;
     const filled = {};
     Object.entries(srcPicks).forEach(([sid, pick]) => {
-      if (pick?.winner && !eliminated.has(pick.winner)) filled[sid] = pick;
+      if (!pick?.winner) return;
+      const effectiveWinner = picksSubMap[pick.winner] || pick.winner;
+      if (!eliminated.has(effectiveWinner)) filled[sid] = pick;
     });
     setScenarioPicks(filled);
   };
@@ -2202,9 +2197,11 @@ export default function App() {
       flatParticipants[key + '__2'] = { ...p, picks: subPicks2 };
     }
   });
-  const leaderboard = buildLeaderboard(flatParticipants, results);
+  // Must be declared before buildLeaderboard / getEliminatedTeams calls below
+  const adminPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
+  const leaderboard = buildLeaderboard(flatParticipants, results, adminPlayInSeeds);
   const topPts      = leaderboard[0]?.points || 1;
-  const eliminatedTeams = getEliminatedTeams(results);
+  const eliminatedTeams = getEliminatedTeams(results, adminPlayInSeeds);
 
   // ── Pool stats ──
   const completedCount = (Array.isArray(results?.rounds) ? results.rounds : Object.values(results?.rounds || {}))
@@ -2213,7 +2210,7 @@ export default function App() {
 
   // ── Scenario ──
   const scenarioResults     = buildScenarioResults(results, scenarioPicks);
-  const scenarioLeaderboard = buildLeaderboard(flatParticipants, scenarioResults);
+  const scenarioLeaderboard = buildLeaderboard(flatParticipants, scenarioResults, adminPlayInSeeds);
 
   // ── Play-In: effective seeds for each context ──
   // Active participant (Picks tab): admin results override their own picks
@@ -2223,10 +2220,8 @@ export default function App() {
   const piAllGames = ["piE1","piE2","piE3","piW1","piW2","piW3"];
   const piDoneCount = piAllGames.filter(k => playInResults?.[k] || activePlayInPicks[k]).length;
   const piComplete  = piDoneCount === piAllGames.length;
-  // Scenario tab: only use admin play-in results
-  const scenarioPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
-  // Admin bracket display: use actual play-in results only
-  const adminPlayInSeeds = resolveEffectiveSeeds({}, playInResults);
+  // Scenario tab: same as adminPlayInSeeds (admin play-in results only, no participant picks)
+  const scenarioPlayInSeeds = adminPlayInSeeds;
 
   // ── Admin: resolve bracket using actual results so later rounds show real team names ──
   const resultsAsPicks = {};
